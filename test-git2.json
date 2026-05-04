@@ -1,1 +1,0 @@
-{"code":"fn main() { println!(\"git2-rs Test OK\"); }","rule_id":"RO-6","rule_name":"Historial Atòmic","rule_description":"Integració nativa amb git2-rs","todo_status":"complete","todo_description":"Evolució a git2-rs","pending_tasks":["Afegir tests d'integració"]}
