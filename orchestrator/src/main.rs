@@ -987,9 +987,7 @@ mod tests {
         assert!(response.status().is_success());
 
         // 2. Verificar que es rep una proposta amb format correcte
-        let proposal_text = response.text().await.unwrap();
-        eprintln!("DEBUG intent response: {}", proposal_text);
-        let proposal: serde_json::Value = serde_json::from_str(&proposal_text).unwrap();
+        let proposal: serde_json::Value = response.json().await.unwrap();
         assert_eq!(proposal["status"], serde_json::Value::Null, "La proposta no ha de tenir status (èxit)");
         assert!(proposal["proposal_id"].is_number(), "Ha de tenir proposal_id");
         assert!(proposal["original_intent"].is_string(), "Ha de tenir original_intent");
@@ -1017,11 +1015,9 @@ mod tests {
             .await
             .unwrap();
         let status = response.status();
-        let approve_text = response.text().await.unwrap();
-        eprintln!("DEBUG approve response: {}", approve_text);
         assert!(status.is_success());
 
-        let approve_response: serde_json::Value = serde_json::from_str(&approve_text).unwrap();
+        let approve_response: serde_json::Value = response.json().await.unwrap();
         assert_eq!(approve_response["status"], "success");
         assert!(approve_response["tasks_added"].is_number());
         let tasks_added = approve_response["tasks_added"].as_u64().unwrap();
