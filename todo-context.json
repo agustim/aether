@@ -1,6 +1,6 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "QA",
+  "current_stage": "complete",
   "tasks": [
     {
       "id": 1,
@@ -15,12 +15,7 @@
     {
       "id": 3,
       "description": "Tasca futura",
-      "status": "completed"
-    },
-    {
-      "id": 4,
-      "description": "Nova tasca des del mòbil",
-      "status": "in_progress"
+      "status": "pending"
     }
   ]
 }
