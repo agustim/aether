@@ -2,11 +2,9 @@
 
 ## Estat actual
 
-Status: QA
-Description: Gestió d'estat amb todo-context.json implementada
+Status: complete
+Description: Regla d'Or 6 implementada
 
 ## Tasques pendents
 
-- [ ] Provar servidor HTTP des de mòbil
-- [ ] Afegir autenticació basic
-- [ ] Crear interfície web mobile-first
+- [ ] 1. Afegir tests
