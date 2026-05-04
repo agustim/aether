@@ -20,6 +20,7 @@ pub mod intent_analyst;
 pub mod llm_client;
 pub mod coding_agent;
 pub mod workspace_manager;
+pub mod telegram_bot;
 use todo_context::TaskStatus;
 
 /// Estat de la compilació.

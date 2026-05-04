@@ -24,9 +24,9 @@ L'aprovació dispararà automàticament el mètode context/approve de l'Orquestr
 
  * Notificació automàtica quan el Correction Loop té èxit després de X intents.
 
-Requisits Tècnics
+## Requisits Tècnics
 * Biblioteca: teloxide per a Rust (framework asíncron).
 
- * Seguretat: El bot només respondrà a IDs de Telegram autoritzats a workspaces.json.
+ * Seguretat: El bot només respondrà a IDs de Telegram autoritzats a workspaces.json. I utilitzarà un token definit a .env per connectar-se a l'API de Telegram. (recorda afegir-ho a env.example)
 
  * Persistència: Guardar el chat_id per poder enviar notificacions "push" sense que l'usuari pregunti.
