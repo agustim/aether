@@ -9,7 +9,16 @@
       "Bash(cargo run *)",
       "Bash(rm *)",
       "Bash(sleep *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(git add *)",
+      "Bash(git restore *)",
+      "Bash(cat)",
+      "Bash(use *)",
+      "Bash(fn *)",
+      "Bash(let *)",
+      "Bash(\"/home/agusti/escriptori/personal/aether\")",
+      "Bash(// *)",
+      "Bash(git commit *)"
     ]
   },
   "$version": 3

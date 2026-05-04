@@ -1,1 +1,1 @@
-fn main() { println!("Hola"); }
+fn main() { println!("Hola des de Rust local"); }
