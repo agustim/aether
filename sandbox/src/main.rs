@@ -1,1 +1,1 @@
-fn main() { println!("Workflow OK!"); }
+fn main() { println!("Hola"); }
