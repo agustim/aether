@@ -40,12 +40,12 @@
     {
       "id": 8,
       "description": "Afegir autenticació basic",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": 9,
       "description": "Crear interfície web mobile-first",
-      "status": "pending"
+      "status": "in_progress"
     }
   ]
 }
