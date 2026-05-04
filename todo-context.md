@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: Crear env.example i refactoritzar LLMClient struct
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests

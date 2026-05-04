@@ -60,12 +60,12 @@
     {
       "id": 12,
       "description": "Analitzar requisits de: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": 14,
       "description": "Implementar funcionalitat: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": 17,
