@@ -7,7 +7,6 @@
 //! Utilitza el comandament `git` CLI per evitar dependre de l'API de git2.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::process::Command;
 
 /// Resultats del conjunt de tests.
@@ -124,7 +123,7 @@ pub fn generate_commit_message(meta: &CommitMetadata) -> String {
 }
 
 /// Configura el nom i email per al commit (només la primera vegada).
-fn configure_git_user(repo_path: &PathBuf) -> Result<(), String> {
+fn configure_git_user(repo_path: &std::path::Path) -> Result<(), String> {
     // Configurar autor per defecte si no està configurat
     let output = Command::new("git")
         .args(["config", "user.name"])
@@ -159,7 +158,7 @@ fn configure_git_user(repo_path: &PathBuf) -> Result<(), String> {
 
 /// Realitza un commit git amb el missatge generat.
 /// Retorna el hash del commit (primeres 7 chars).
-pub fn make_commit(repo_path: &PathBuf, message: &str) -> Result<String, String> {
+pub fn make_commit(repo_path: &std::path::Path, message: &str) -> Result<String, String> {
     configure_git_user(repo_path)?;
 
     // 1. git add -A (tots els fitxers)
@@ -214,7 +213,7 @@ pub fn make_commit(repo_path: &PathBuf, message: &str) -> Result<String, String>
 }
 
 /// Crea un fitxer Todo-Context si no existeix.
-pub fn init_todo_context(repo_path: &PathBuf, description: &str) -> Result<(), String> {
+pub fn init_todo_context(repo_path: &std::path::Path, description: &str) -> Result<(), String> {
     let todo_path = repo_path.join("todo-context.md");
     if todo_path.exists() {
         return Ok(());
@@ -235,7 +234,7 @@ pub fn init_todo_context(repo_path: &PathBuf, description: &str) -> Result<(), S
 
 /// Actualitza el fitxer Todo-Context amb l'estat actual.
 pub fn update_todo_context(
-    repo_path: &PathBuf,
+    repo_path: &std::path::Path,
     todo: &TodoContext,
 ) -> Result<(), String> {
     let todo_path = repo_path.join("todo-context.md");

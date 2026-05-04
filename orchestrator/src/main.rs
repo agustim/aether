@@ -204,7 +204,7 @@ fn parse_test_results(output: &str) -> commit::TestResults {
                 failed += 1;
                 // Extreure el nom del test
                 let parts: Vec<&str> = line.split("...").collect();
-                if parts.len() > 0 {
+                if !parts.is_empty() {
                     let test_name = parts[0].trim().to_string();
                     details.push(test_name);
                 }
@@ -226,7 +226,7 @@ fn parse_test_results(output: &str) -> commit::TestResults {
             if line.contains("test result:") {
                 // Ex: "test result: ok. 5 passed; 0 failed"
                 if let Some(counts) = line.split("passed").next() {
-                    if let Some(last) = counts.split(';').last() {
+                    if let Some(last) = counts.split(';').next_back() {
                         if let Ok(p) = last.trim().trim_start().parse::<u32>() {
                             passed = p;
                         }
