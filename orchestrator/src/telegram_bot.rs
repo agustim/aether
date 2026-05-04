@@ -288,6 +288,32 @@ impl ChatRegistry {
 }
 
 // ============================================================================
+// Execució del bot
+// ============================================================================
+
+/// Executa el bot de Telegram.
+///
+/// Aquesta funció és un placeholder que mostra els logs.
+/// Per implementar el bot complet, cal ajustar-lo a l'API de teloxide.
+pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
+    tracing::info!("🤖 Bot de Telegram iniciat");
+    tracing::info!("👥 Usuaris autoritzats: {}", config.authorized_ids.join(", "));
+
+    // TODO: Implementar amb teloxide::prelude::*
+    // Exemple:
+    // let bot = Bot::new(&config.bot_token);
+    // let handler = update::filter_message()...;
+    // Dispatcher::builder(bot, handler).build().dispatch().await;
+
+    tracing::info!("ℹ️  Bot de Telegram en mode placeholder (cal implementar amb teloxide)");
+
+    // Simular espera (en producció seria polling.loop)
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

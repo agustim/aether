@@ -595,29 +595,63 @@ async fn add_task_handler(
 }
 
 fn main() {
-    // Mode HTTP: si hi ha una variable d'ambient PORT, executa el servidor HTTP.
-    // Sinó, mode consola (stdin → stdout) per compatibilitat.
-    let rt = tokio::runtime::Runtime::new().expect("No s'ha pogut crear el runtime de tokio");
+    // Inicialitzar logging
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,aether=debug".into())
+        )
+        .init();
+
+    tracing::info!("🚀 Iniciant Aether Orchestrator...");
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let mode = std::env::var("MODE").unwrap_or_else(|_| "http".to_string());
 
-    if std::env::var("MODE").unwrap_or_else(|_| "http".to_string()) == "http" {
+    let rt = tokio::runtime::Runtime::new()
+        .expect("No s'ha pogut crear el runtime de tokio");
+
+    if mode == "http" {
         rt.block_on(async {
+            // Crear els serveis
             let app = build_router();
             let addr = format!("0.0.0.0:{port}");
+
+            // Opcionalment iniciar el bot de Telegram
+            let telegram_handle = if let Ok(config) = telegram_bot::TelegramConfig::from_env() {
+                tracing::info!("📱 Configurant bot de Telegram...");
+                let handle = tokio::spawn(async move {
+                    if let Err(e) = telegram_bot::run_telegram_bot(config).await {
+                        tracing::error!("❌ Error en el bot de Telegram: {e}");
+                    }
+                });
+                Some(handle)
+            } else {
+                tracing::warn!("⚠️  TELEGRAM_BOT_TOKEN no configurada — mode HTTP únic");
+                None
+            };
+
+            // Arrancar el servidor HTTP
             let listener = tokio::net::TcpListener::bind(&addr)
                 .await
                 .expect("No s'ha pogut enllaçar el port");
 
-            eprintln!("🛰️  Aether Orchestrator corrent a http://{addr}");
-            eprintln!("   Endpoint: POST http://{addr}/compile");
+            tracing::info!("🛰️  Servidor HTTP actiu a http://{addr}");
+            tracing::info!("   ✅ POST http://{addr}/compile");
+            tracing::info!("   ✅ GET  http://{addr}/context");
+            tracing::info!("   ✅ POST http://{addr}/intent");
 
-            axum::serve(
-                listener,
-                app,
-            )
-            .await
-            .expect("Error executant el servidor");
+            // Esperar que HTTP acabi (el bot s'atura amb Ctrl+C)
+            if let Err(e) = axum::serve(listener, app).await {
+                tracing::error!("❌ Error en el servidor HTTP: {e}");
+            }
+
+            // Esperar que el bot acabi (si existeix)
+            if let Some(handle) = telegram_handle {
+                handle.abort();
+            }
+
+            tracing::info!("👋 Aether Orchestrator aturat");
         });
     } else {
         // Mode consola per compatibilitat
