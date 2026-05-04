@@ -2,5 +2,5 @@
 
 ## Estat actual
 
-Status: in-progress
-Description: Compilació via HTTP
+Status: complete
+Description: Interfície de Telegram (telegram_bot.rs)
