@@ -1,17 +1,24 @@
-# Aether Code Docker Sandbox — Imatge mínima per a validació aïllada
+# Fem servir la versió slim de Rust (molt més petita que la completa però amb tot el necessari)
 FROM rust:1.75-slim
 
-# Instal·lar dependències necessàries
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+# Instal·lem eines bàsiques si les necessites (opcional)
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# Crear usuari no-root per seguretat
-RUN useradd -m -u 1000 aether
+# Creem l'usuari 'aether' de forma estàndard Linux
+RUN useradd -m -s /bin/bash aether
 
-# Canviar a usuari no-root
+# Configurem el directori de treball
+WORKDIR /home/aether/app
+
+# Donem permisos totals a l'usuari aether sobre la seva carpeta
+RUN chown -R aether:aether /home/aether/app
+
+# Canviem a l'usuari no-privilegiat
 USER aether
 
-# Directori de treball
-WORKDIR /home/aether/sandbox
+# Preparem un projecte buit perquè les compilacions posteriors siguin ràpides
+RUN cargo new --bin sandbox
+WORKDIR /home/aether/app/sandbox
 
-# Per defecte, executar cargo check
-CMD ["cargo", "check"]
+# Per defecte, si no li diem res, que no faci res pesat
+CMD ["sleep", "infinity"]
