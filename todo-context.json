@@ -1,6 +1,6 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "Dev",
+  "current_stage": "complete",
   "tasks": [
     {
       "id": 1,
@@ -56,6 +56,21 @@
       "id": 11,
       "description": "Crear env.example i refactoritzar LLMClient struct",
       "status": "completed"
+    },
+    {
+      "id": 12,
+      "description": "Analitzar requisits de: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+      "status": "in_progress"
+    },
+    {
+      "id": 14,
+      "description": "Implementar funcionalitat: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+      "status": "pending"
+    },
+    {
+      "id": 17,
+      "description": "Crear tests per validar: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+      "status": "pending"
     }
   ]
 }
