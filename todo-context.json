@@ -1,66 +1,26 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "complete",
+  "current_stage": "QA",
   "tasks": [
     {
       "id": 1,
-      "description": "Implementar Compiler-Agent bàsic",
+      "description": "Tasca antiga",
       "status": "completed"
     },
     {
       "id": 2,
-      "description": "Integrar git2-rs per a commits automàtics",
+      "description": "Tasca en curs",
       "status": "completed"
     },
     {
       "id": 3,
-      "description": "Exposar endpoint HTTP /compile",
+      "description": "Tasca futura",
       "status": "completed"
     },
     {
       "id": 4,
-      "description": "Gestió d'estat amb todo-context.json",
-      "status": "completed"
-    },
-    {
-      "id": 5,
-      "description": "Sandbox Docker aïllat sense xarxa",
-      "status": "completed"
-    },
-    {
-      "id": 6,
-      "description": "Provar servidor HTTP des de mòbil",
-      "status": "completed"
-    },
-    {
-      "id": 7,
-      "description": "Sistema d'Intencions i Analista IA",
-      "status": "completed"
-    },
-    {
-      "id": 8,
-      "description": "Afegir autenticació basic",
-      "status": "completed"
-    },
-    {
-      "id": 9,
-      "description": "Crear interfície web mobile-first",
-      "status": "completed"
-    },
-    {
-      "id": 10,
-      "description": "Connectar LLM amb tests d'integració (mockito)",
-      "status": "completed"
-    },
-    {
-      "id": 11,
-      "description": "Crear env.example i refactoritzar LLMClient struct",
-      "status": "completed"
-    },
-    {
-      "id": 12,
-      "description": "Implementar self-correction loop (coding_agent.rs)",
-      "status": "completed"
+      "description": "Nova tasca des del mòbil",
+      "status": "in_progress"
     }
   ]
 }
