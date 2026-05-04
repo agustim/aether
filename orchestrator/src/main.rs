@@ -14,6 +14,7 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 
 pub mod commit;
+use commit::TodoContext;
 
 /// Estat de la compilació.
 #[derive(Debug, Serialize)]
@@ -113,7 +114,7 @@ async fn build_and_commit(
     let repo_path = workspace_root();
 
     // Inicialitzar el Todo-Context si no existeix
-    let _ = commit::init_todo_context(&repo_path, todo_description);
+    let _ = commit::update_todo_context_file(&repo_path, &TodoContext::new("in-progress", todo_description));
 
     // Compilar el codi
     let lock = get_sandbox_lock();
@@ -165,10 +166,10 @@ async fn build_and_commit(
     };
 
     let commit_msg = commit::generate_commit_message(&meta);
-    let commit_hash = match commit::make_commit(&repo_path, &commit_msg) {
+    let commit_hash = match commit::make_commit_with_git2(&repo_path, &commit_msg) {
         Ok(hash) => {
             // Actualitzar el Todo-Context
-            let _ = commit::update_todo_context(&repo_path, &meta.todo_context);
+            let _ = commit::update_todo_context_file(&repo_path, &meta.todo_context);
             Some(hash)
         }
         Err(e) => {
