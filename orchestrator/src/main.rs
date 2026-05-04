@@ -19,6 +19,7 @@ pub mod docker_sandbox;
 pub mod intent_analyst;
 pub mod llm_client;
 pub mod coding_agent;
+pub mod workspace_manager;
 use todo_context::TaskStatus;
 
 /// Estat de la compilació.
