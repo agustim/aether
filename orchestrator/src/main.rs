@@ -27,14 +27,25 @@ enum Status {
 #[derive(Debug, Deserialize)]
 struct BuildRequest {
     code: String,
+    #[serde(default = "default_rule_id")]
     rule_id: String,
+    #[serde(default = "default_rule_name")]
     rule_name: String,
+    #[serde(default = "default_rule_description")]
     rule_description: String,
+    #[serde(default = "default_todo_status")]
     todo_status: String,
+    #[serde(default = "default_todo_description")]
     todo_description: String,
     #[serde(default)]
     pending_tasks: Vec<String>,
 }
+
+fn default_rule_id() -> String { "BR-000".into() }
+fn default_rule_name() -> String { "Compilació Simple".into() }
+fn default_rule_description() -> String { "Codi enviat via HTTP sense metadades".into() }
+fn default_todo_status() -> String { "in-progress".into() }
+fn default_todo_description() -> String { "Compilació via HTTP".into() }
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
