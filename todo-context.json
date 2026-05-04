@@ -1,25 +1,45 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "QA",
+  "current_stage": "complete",
   "tasks": [
     {
       "id": 1,
-      "description": "Tasca antiga",
+      "description": "Implementar Compiler-Agent bàsic",
       "status": "completed"
     },
     {
       "id": 2,
-      "description": "Tasca en curs",
+      "description": "Integrar git2-rs per a commits automàtics",
       "status": "completed"
     },
     {
       "id": 3,
-      "description": "Tasca futura",
+      "description": "Exposar endpoint HTTP /compile",
       "status": "completed"
     },
     {
       "id": 4,
-      "description": "Nova tasca des del mòbil",
+      "description": "Gestió d'estat amb todo-context.json",
+      "status": "completed"
+    },
+    {
+      "id": 5,
+      "description": "Sandbox Docker aïllat sense xarxa",
+      "status": "completed"
+    },
+    {
+      "id": 6,
+      "description": "Provar servidor HTTP des de mòbil",
+      "status": "completed"
+    },
+    {
+      "id": 7,
+      "description": "Afegir autenticació basic",
+      "status": "completed"
+    },
+    {
+      "id": 8,
+      "description": "Crear interfície web mobile-first",
       "status": "in_progress"
     }
   ]

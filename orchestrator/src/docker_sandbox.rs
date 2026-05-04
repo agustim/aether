@@ -82,7 +82,14 @@ pub fn docker_image_exists(image_name: &str) -> Result<bool, String> {
 pub fn run_docker_check(config: &DockerSandboxConfig, workspace_root: &PathBuf, code: &str) -> Result<DockerCheckResult, String> {
     // Assegurar-se que la imatge existeix
     if !docker_image_exists(&config.image_name)? {
-        build_docker_image(config, workspace_root)?;
+        if let Err(e) = build_docker_image(config, workspace_root) {
+            return Err(format!("Docker no disponible: {e}"));
+        }
+    }
+
+    // Verificar que la imatge té l'usuari aether
+    if let Err(e) = verify_docker_user(&config.image_name, "aether") {
+        return Err(format!("Docker image sense usuari correcte: {e}"));
     }
 
     // Escriure el codi al directori del sandbox
@@ -136,6 +143,28 @@ pub fn run_docker_check(config: &DockerSandboxConfig, workspace_root: &PathBuf, 
             Some(stderr)
         },
     })
+}
+
+/// Verifica que la imatge Docker té l'usuari especificat.
+pub fn verify_docker_user(image_name: &str, username: &str) -> Result<(), String> {
+    let output = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            image_name,
+            "id",
+            "-un",
+        ])
+        .output()
+        .map_err(|e| format!("Error verificant usuari: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    
+    if stdout == username {
+        Ok(())
+    } else {
+        Err(format!("Usuari 'aether' no trobat a la imatge Docker (found: {})", stdout))
+    }
 }
 
 /// Executa tests dins del contenidor Docker.
@@ -240,5 +269,71 @@ mod tests {
         let config = DockerSandboxConfig::default();
         assert_eq!(config.timeout_seconds, 60);
         assert_eq!(config.image_name, "aether-sandbox:latest");
+    }
+
+    #[test]
+    fn test_network_isolation_verification() {
+        // Aquest test verifica que el codi amb accés a xarxa és detectat
+        // per la comprovació estàtica de l'orquestrador.
+        // La verificació real de xarxa es fa amb Docker (network_mode: none).
+
+        let code_with_network = "use std::net::TcpStream; fn main() { TcpStream::connect(\"127.0.0.1:8080\"); }";
+        assert!(
+            check_no_network_code(code_with_network).is_err(),
+            "El codi amb TcpStream hauria de ser detectat"
+        );
+
+        let code_with_reqwest = "fn main() { reqwest::blocking::get(\"https://example.com\").unwrap(); }";
+        assert!(
+            check_no_network_code(code_with_reqwest).is_err(),
+            "El codi amb reqwest hauria de ser detectat"
+        );
+
+        let code_without_network = "fn main() { let x = 42; println!(\"{}\", x); }";
+        assert!(
+            check_no_network_code(code_without_network).is_ok(),
+            "El codi sense xarxa hauria de ser acceptat"
+        );
+    }
+
+    #[test]
+    fn test_docker_image_exists() {
+        // Verifica que la funció docker_image_exists funciona correctament
+        // amb una imatge que probablement existeix (alpine)
+        let result = docker_image_exists("alpine:latest");
+        // El resultat pot ser Ok(true) o Ok(false) depenent de si la imatge existeix
+        assert!(result.is_ok(), "docker_image_exists no hauria de fallar");
+    }
+
+    #[test]
+    fn test_docker_build_command() {
+        // Aquest test verifica que el comanament de build es genera correctament
+        let config = DockerSandboxConfig::default();
+        let workspace = PathBuf::from("/tmp/aether_test_docker");
+        std::fs::create_dir_all(&workspace).ok();
+
+        // Crea un Dockerfile de prova
+        let dockerfile = workspace.join("Dockerfile");
+        std::fs::write(&dockerfile, "FROM alpine:latest\nRUN echo hello").ok();
+
+        // Executar el build Docker només si Docker està disponible
+        let result = build_docker_image(&config, &workspace);
+        // Podem ser flexibles: o bé funciona, o bé Docker no està disponible
+        match result {
+            Ok(()) => {
+                // Build exitós — tot correcte
+            }
+            Err(e) => {
+                // Si Docker no està disponible, és acceptable
+                assert!(
+                    e.contains("Docker") || e.contains("exec"),
+                    "Error esperat si Docker no és accessible: {}",
+                    e
+                );
+            }
+        }
+
+        // Netejar
+        let _ = std::fs::remove_dir_all(&workspace);
     }
 }

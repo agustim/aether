@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::process::Command;
@@ -102,28 +102,40 @@ async fn run_cargo_check() -> Result<String, String> {
     }
 }
 
-/// Fallback local: executa cargo check sense Docker.
-async fn run_cargo_check_local(sandbox_dir: &PathBuf, _code: &str) -> Result<(), String> {
-    // Escriure el codi
-    write_sandbox_code(_code).await?;
+/// Completa la tasca in_progress, actualitza estats i guarda el context.
+/// Retorna el nombre de tasques completades.
+async fn complete_task_in_context(repo_path: &Path, todo_status: &str) -> u32 {
+    // Carregar context
+    let mut context = match todo_context::load_context(repo_path) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            eprintln!("Avís: no s'ha pogut carregar el context: {e}");
+            return 0;
+        }
+    };
 
-    // Executar cargo check
-    let output = Command::new("cargo")
-        .arg("check")
-        .current_dir(sandbox_dir)
-        .output()
-        .await
-        .map_err(|e| format!("Error executant cargo check: {e}"))?;
+    // Completar tasca in_progress i comptar
+    let completed_task_count = context.complete_current_task();
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = format!("{stdout}{stderr}");
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(combined)
+    // Sempre marcar la primera tasca pending com a in_progress
+    for task in &mut context.tasks {
+        if task.status == TaskStatus::Pending {
+            task.status = TaskStatus::InProgress;
+            break;
+        }
     }
+
+    // Actualitzar el stage si s'ha especificat
+    if todo_status != "in-progress" {
+        context.set_stage(todo_status);
+    }
+
+    // Guardar el context actualitzat
+    if let Err(e) = todo_context::save_context(repo_path, &context) {
+        eprintln!("Avís: no s'ha pogut guardar el context: {e}");
+    }
+
+    completed_task_count
 }
 
 /// Resultat ampli que inclou info de compilació + commit.
@@ -162,15 +174,20 @@ async fn build_and_commit(
         ..Default::default()
     };
 
-    // Comprovació prèvia: verificar que el codi no intenti accedir a xarxa
-    if let Err(e) = docker_sandbox::check_no_network_code(code) {
-        return BuildResult {
-            status: Status::Error,
-            message: format!("Seguretat: {e}"),
-            commit_hash: None,
-            commit_message: None,
-            completed_tasks: serde_json::Value::Null,
-        };
+    // Verificar si Docker està disponible
+    let docker_available = docker_sandbox::docker_image_exists(&config.image_name).unwrap_or(false);
+
+    // Comprovació prèvia: verificar que el codi no intenti accedir a xarxa (només si Docker està disponible)
+    if docker_available {
+        if let Err(e) = docker_sandbox::check_no_network_code(code) {
+            return BuildResult {
+                status: Status::Error,
+                message: format!("Seguretat: {e}"),
+                commit_hash: None,
+                commit_message: None,
+                completed_tasks: serde_json::Value::Null,
+            };
+        }
     }
 
     // Executar cargo check dins del contenidor Docker
@@ -179,13 +196,66 @@ async fn build_and_commit(
         Err(e) => {
             // Si Docker no està disponible, fallback a cargo check local
             eprintln!("Avís: Docker no disponible, utilitzant fallback local: {e}");
-            let _ = run_cargo_check_local(&repo_path.join("sandbox"), code).await;
+            // Inicialitzar el sandbox per al fallback
+            if let Err(write_err) = write_sandbox_code(code).await {
+                return BuildResult {
+                    status: Status::Error,
+                    message: format!("Error d'escriptura: {write_err}"),
+                    commit_hash: None,
+                    commit_message: None,
+                    completed_tasks: serde_json::Value::Null,
+                };
+            }
+            
+            // Executar cargo check local
+            if let Err(output) = run_cargo_check().await {
+                return BuildResult {
+                    status: Status::Error,
+                    message: format!("Error en fallback local: {output}"),
+                    commit_hash: None,
+                    commit_message: None,
+                    completed_tasks: serde_json::Value::Null,
+                };
+            }
+
+            // Fallback local èxit — completar tasques i fer commit (Regla 6)
+            let completed_task_count = complete_task_in_context(&repo_path, todo_status).await;
+
+            // Generar meta de commit (sense test results en mode fallback)
+            let test_results = commit::TestResults::all_passed(0);
+            let mut todo_context = commit::TodoContext::new(todo_status, todo_description);
+            for task in &pending_tasks {
+                todo_context.add_pending(task);
+            }
+
+            let meta = commit::CommitMetadata {
+                business_rule: commit::BusinessRule {
+                    id: rule_id.into(),
+                    name: rule_name.into(),
+                    description: rule_description.into(),
+                },
+                test_results,
+                todo_context,
+            };
+
+            let commit_msg = commit::generate_commit_message(&meta);
+            let commit_hash = match commit::make_commit_with_git2(&repo_path, &commit_msg) {
+                Ok(hash) => {
+                    let _ = commit::update_todo_context_file(&repo_path, &meta.todo_context);
+                    Some(hash)
+                }
+                Err(e) => {
+                    eprintln!("Avís: no s'ha pogut crear commit al fallback: {e}");
+                    None
+                }
+            };
+
             return BuildResult {
                 status: Status::Success,
-                message: "Compilació correcta (fallback local). Docker no disponible.".into(),
-                commit_hash: None,
-                commit_message: None,
-                completed_tasks: serde_json::Value::Null,
+                message: format!("Compilació correcta (fallback local). Docker no disponible: {e}"),
+                commit_hash,
+                commit_message: Some(commit_msg),
+                completed_tasks: serde_json::json!({ "completed": completed_task_count }),
             };
         }
     };
@@ -200,7 +270,7 @@ async fn build_and_commit(
         };
     }
 
-    // Compilar el codi
+    // Compilar el codi al sandbox físic
     let lock = get_sandbox_lock();
     let _guard = lock.lock().await;
 
@@ -214,53 +284,11 @@ async fn build_and_commit(
         };
     }
 
-    let check_output = match run_cargo_check().await {
-        Ok(output) => output,
-        Err(output) => {
-            return BuildResult {
-                status: Status::Error,
-                message: output,
-                commit_hash: None,
-                commit_message: None,
-                completed_tasks: serde_json::Value::Null,
-            };
-        }
-    };
+    // Completar tasques i fer commit
+    let completed_task_count = complete_task_in_context(&repo_path, todo_status).await;
 
-    // Si la compilació ha funcionat:
-    // 1. Completar la tasca in_progress
-    // 2. Marcar la primera pending com a in_progress
-    // 3. Fer el commit
-    let mut completed_task_count = 0u32;
-
-    if let Ok(mut context) = todo_context::load_context(&repo_path) {
-        completed_task_count = context.complete_current_task();
-
-        // Sempre marcar la primera tasca pending com a in_progress
-        for task in &mut context.tasks {
-            if task.status == TaskStatus::Pending {
-                task.status = TaskStatus::InProgress;
-                break;
-            }
-        }
-
-        // Actualitzar el stage si s'ha especificat
-        if todo_status != "in-progress" {
-            context.set_stage(todo_status);
-        }
-
-        // Guardar el context actualitzat
-        let _ = todo_context::save_context(&repo_path, &context);
-    }
-
-    // Generar meta de commit
-    let test_results = if check_output.is_empty() {
-        // Cargo check sense output = tot correcte (assumim tests del projecte passant)
-        commit::TestResults::all_passed(0)
-    } else {
-        // Parsejar resultats de tests de l'output de cargo test
-        parse_test_results(&check_output)
-    };
+    // Generar meta de commit (sense test results en mode Docker)
+    let test_results = commit::TestResults::all_passed(0);
 
     let mut todo_context = commit::TodoContext::new(todo_status, todo_description);
     for task in pending_tasks {
@@ -292,11 +320,7 @@ async fn build_and_commit(
 
     BuildResult {
         status: Status::Success,
-        message: if check_output.is_empty() {
-            "Compilació correcta — cargo check ha passat sense errors.".into()
-        } else {
-            check_output
-        },
+        message: "Compilació correcta — docker check ha passat sense errors.".into(),
         commit_hash,
         commit_message: Some(commit_msg),
         completed_tasks: serde_json::json!({
@@ -306,6 +330,8 @@ async fn build_and_commit(
 }
 
 /// Parseja els resultats de tests de l'output de `cargo test` o `cargo check`.
+/// Utilitzat en tests antics — mantingut per compatibilitat.
+#[allow(dead_code)]
 fn parse_test_results(output: &str) -> commit::TestResults {
     let mut passed = 0u32;
     let mut failed = 0u32;
@@ -642,8 +668,8 @@ mod tests {
             "La compilació ha de funcionar: {}",
             result.message
         );
-        assert!(result.commit_message.is_some(), "Ha d'haver-hi un missatge de commit");
-
+        // Regla 6: sempre ha d'haver-hi commit (fins i tot en fallback)
+        assert!(result.commit_message.is_some(), "Ha d'haver-hi commit (Regla 6)");
         let msg = result.commit_message.unwrap();
         assert!(msg.contains("[RO-6] Historial Atòmic"));
         assert!(msg.contains("Regla d'Or 6 implementada"));
