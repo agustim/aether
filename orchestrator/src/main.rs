@@ -254,7 +254,67 @@ fn parse_test_results(output: &str) -> commit::TestResults {
     }
 }
 
+/// Construeix el router d'axum amb els endpoints.
+fn build_router() -> axum::Router {
+    use axum::routing::post;
+    use tower_http::trace::TraceLayer;
+
+    axum::Router::new()
+        .route("/compile", post(compile_handler))
+        .layer(TraceLayer::new_for_http())
+}
+
+/// Handler de l'endpoint POST /compile.
+async fn compile_handler(
+    axum::extract::Json(payload): axum::extract::Json<BuildRequest>,
+) -> axum::response::Json<serde_json::Value> {
+    let result = build_and_commit(
+        &payload.code,
+        &payload.rule_id,
+        &payload.rule_name,
+        &payload.rule_description,
+        &payload.todo_status,
+        &payload.todo_description,
+        payload.pending_tasks,
+    )
+    .await;
+
+    axum::response::Json(serde_json::to_value(&result).unwrap())
+}
+
 fn main() {
+    // Mode HTTP: si hi ha una variable d'ambient PORT, executa el servidor HTTP.
+    // Sinó, mode consola (stdin → stdout) per compatibilitat.
+    let rt = tokio::runtime::Runtime::new().expect("No s'ha pogut crear el runtime de tokio");
+
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+
+    if std::env::var("MODE").unwrap_or_else(|_| "http".to_string()) == "http" {
+        rt.block_on(async {
+            let app = build_router();
+            let addr = format!("0.0.0.0:{port}");
+            let listener = tokio::net::TcpListener::bind(&addr)
+                .await
+                .expect("No s'ha pogut enllaçar el port");
+
+            eprintln!("🛰️  Aether Orchestrator corrent a http://{addr}");
+            eprintln!("   Endpoint: POST http://{addr}/compile");
+
+            axum::serve(
+                listener,
+                app,
+            )
+            .await
+            .expect("Error executant el servidor");
+        });
+    } else {
+        // Mode consola per compatibilitat
+        mode_console(&rt);
+    }
+}
+
+/// Mode consola: llegir de stdin, escriure a stdout.
+fn mode_console(_rt: &tokio::runtime::Runtime) {
     // Mode de consola: llegim entrada de stdin i retornem JSON a stdout.
     // Soporta dos formats:
     //   1. Codi Rust simple (per compatibilitat): retorna CheckResult
@@ -412,5 +472,46 @@ mod tests {
             result.commit_hash.is_none(),
             "No s'ha de fer commit amb codi invàlid"
         );
+    }
+
+    // ========================================================================
+    // Tests HTTP — Regla de Negoci: endpoint /compile
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_http_compile_valid_code() {
+        // Arrencar el servidor en un port aleatori
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let app = build_router();
+
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        // Esperar que el servidor arrenqui
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // Fer el POST
+        let client = reqwest::Client::new();
+        let url = format!("http://127.0.0.1:{port}/compile");
+        let response = client
+            .post(&url)
+            .json(&serde_json::json!({
+                "code": "fn main() { println!(\"HTTP OK!\"); }"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["status"], "Success");
+
+        // Aturar el servidor
+        server.abort();
+        let _ = server.await;
     }
 }
