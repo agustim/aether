@@ -3,8 +3,9 @@
 ## Estat actual
 
 Status: complete
-Description: Regla d'Or 6 implementada
+Description: Implementació de la Regla d'Or 6
 
 ## Tasques pendents
 
-- [ ] 1. Afegir tests
+- [ ] 1. Afegir tests d'integració
+- [ ] 2. Crear interfície web
