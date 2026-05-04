@@ -2,5 +2,9 @@
 
 ## Estat actual
 
-Status: in-progress
-Description: Codi invàlid
+Status: complete
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests

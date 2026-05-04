@@ -45,12 +45,12 @@
     {
       "id": 10,
       "description": "Implementar funcionalitat: Vull que el sistema saludi en català",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": 13,
       "description": "Crear tests per validar: Vull que el sistema saludi en català",
-      "status": "pending"
+      "status": "in_progress"
     }
   ]
 }
