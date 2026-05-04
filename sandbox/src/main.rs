@@ -1,1 +1,1 @@
-fn main() { println!("HTTP Server OK!"); }
+fn main() { println!("Commit OK"); }
