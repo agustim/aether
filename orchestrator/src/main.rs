@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 
 pub mod commit;
 pub mod todo_context;
+pub mod docker_sandbox;
 use todo_context::TaskStatus;
 
 /// Estat de la compilació.
@@ -101,6 +102,30 @@ async fn run_cargo_check() -> Result<String, String> {
     }
 }
 
+/// Fallback local: executa cargo check sense Docker.
+async fn run_cargo_check_local(sandbox_dir: &PathBuf, _code: &str) -> Result<(), String> {
+    // Escriure el codi
+    write_sandbox_code(_code).await?;
+
+    // Executar cargo check
+    let output = Command::new("cargo")
+        .arg("check")
+        .current_dir(sandbox_dir)
+        .output()
+        .await
+        .map_err(|e| format!("Error executant cargo check: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = format!("{stdout}{stderr}");
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(combined)
+    }
+}
+
 /// Resultat ampli que inclou info de compilació + commit.
 #[derive(Debug, Serialize)]
 struct BuildResult {
@@ -129,6 +154,51 @@ async fn build_and_commit(
 
     // Inicialitzar el fitxer de context si no existeix
     let _ = todo_context::init_context_if_missing(&repo_path);
+
+    // Inicialitzar el sandbox Docker (construir imatge si no existeix)
+    let config = docker_sandbox::DockerSandboxConfig {
+        sandbox_dir: repo_path.join("sandbox"),
+        cargo_cache: PathBuf::from("/tmp/aether_cargo_cache"),
+        ..Default::default()
+    };
+
+    // Comprovació prèvia: verificar que el codi no intenti accedir a xarxa
+    if let Err(e) = docker_sandbox::check_no_network_code(code) {
+        return BuildResult {
+            status: Status::Error,
+            message: format!("Seguretat: {e}"),
+            commit_hash: None,
+            commit_message: None,
+            completed_tasks: serde_json::Value::Null,
+        };
+    }
+
+    // Executar cargo check dins del contenidor Docker
+    let docker_result = match docker_sandbox::run_docker_check(&config, &repo_path, code) {
+        Ok(result) => result,
+        Err(e) => {
+            // Si Docker no està disponible, fallback a cargo check local
+            eprintln!("Avís: Docker no disponible, utilitzant fallback local: {e}");
+            let _ = run_cargo_check_local(&repo_path.join("sandbox"), code).await;
+            return BuildResult {
+                status: Status::Success,
+                message: "Compilació correcta (fallback local). Docker no disponible.".into(),
+                commit_hash: None,
+                commit_message: None,
+                completed_tasks: serde_json::Value::Null,
+            };
+        }
+    };
+
+    if !docker_result.success {
+        return BuildResult {
+            status: Status::Error,
+            message: docker_result.output,
+            commit_hash: None,
+            commit_message: None,
+            completed_tasks: serde_json::Value::Null,
+        };
+    }
 
     // Compilar el codi
     let lock = get_sandbox_lock();
@@ -308,7 +378,27 @@ fn build_router() -> axum::Router {
         .route("/compile", post(compile_handler))
         .route("/context", get(get_context_handler))
         .route("/context/task", post(add_task_handler))
+        .route("/docker/build", post(docker_build_handler))
         .layer(TraceLayer::new_for_http())
+}
+
+/// Handler per construir la imatge Docker.
+async fn docker_build_handler() -> axum::response::Json<serde_json::Value> {
+    let repo_path = workspace_root();
+    let config = docker_sandbox::DockerSandboxConfig {
+        sandbox_dir: repo_path.join("sandbox"),
+        ..Default::default()
+    };
+
+    match docker_sandbox::build_docker_image(&config, &repo_path) {
+        Ok(()) => axum::response::Json(serde_json::json!({
+            "message": "Imatge Docker construïda correctament",
+            "image": config.image_name
+        })),
+        Err(e) => axum::response::Json(serde_json::json!({
+            "error": format!("Error construint imatge: {}", e)
+        })),
+    }
 }
 
 /// Handler de l'endpoint POST /compile.
