@@ -1,0 +1,21 @@
+{
+  "current_stage": "Dev",
+  "project_name": "Aether Code",
+  "tasks": [
+    {
+      "description": "Tasca antiga",
+      "id": 1,
+      "status": "completed"
+    },
+    {
+      "description": "Tasca en curs",
+      "id": 2,
+      "status": "in_progress"
+    },
+    {
+      "description": "Tasca futura",
+      "id": 3,
+      "status": "pending"
+    }
+  ]
+}

@@ -14,7 +14,8 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 
 pub mod commit;
-use commit::TodoContext;
+pub mod todo_context;
+use todo_context::TaskStatus;
 
 /// Estat de la compilació.
 #[derive(Debug, Serialize)]
@@ -109,6 +110,8 @@ struct BuildResult {
     commit_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     commit_message: Option<String>,
+    #[serde(skip_serializing_if = "serde_json::Value::is_null", default)]
+    completed_tasks: serde_json::Value,
 }
 
 /// Funció completa: compila el codi, fa el commit si tot va bé
@@ -124,8 +127,8 @@ async fn build_and_commit(
 ) -> BuildResult {
     let repo_path = workspace_root();
 
-    // Inicialitzar el Todo-Context si no existeix
-    let _ = commit::update_todo_context_file(&repo_path, &TodoContext::new("in-progress", todo_description));
+    // Inicialitzar el fitxer de context si no existeix
+    let _ = todo_context::init_context_if_missing(&repo_path);
 
     // Compilar el codi
     let lock = get_sandbox_lock();
@@ -137,6 +140,7 @@ async fn build_and_commit(
             message: format!("Error d'escriptura: {e}"),
             commit_hash: None,
             commit_message: None,
+            completed_tasks: serde_json::Value::Null,
         };
     }
 
@@ -148,11 +152,39 @@ async fn build_and_commit(
                 message: output,
                 commit_hash: None,
                 commit_message: None,
+                completed_tasks: serde_json::Value::Null,
             };
         }
     };
 
-    // Si la compilació ha funcionat, fer el commit
+    // Si la compilació ha funcionat:
+    // 1. Completar la tasca in_progress
+    // 2. Fer el commit
+    let mut completed_task_count = 0u32;
+
+    if let Ok(mut context) = todo_context::load_context(&repo_path) {
+        completed_task_count = context.complete_current_task();
+
+        // Si hi ha tasques pending, marcar la primera com a in_progress
+        if completed_task_count == 0 {
+            for task in &mut context.tasks {
+                if task.status == TaskStatus::Pending {
+                    task.status = TaskStatus::InProgress;
+                    break;
+                }
+            }
+        }
+
+        // Actualitzar el stage si s'ha especificat
+        if todo_status != "in-progress" {
+            context.set_stage(todo_status);
+        }
+
+        // Guardar el context actualitzat
+        let _ = todo_context::save_context(&repo_path, &context);
+    }
+
+    // Generar meta de commit
     let test_results = if check_output.is_empty() {
         // Cargo check sense output = tot correcte (assumim tests del projecte passant)
         commit::TestResults::all_passed(0)
@@ -198,6 +230,9 @@ async fn build_and_commit(
         },
         commit_hash,
         commit_message: Some(commit_msg),
+        completed_tasks: serde_json::json!({
+            "completed": completed_task_count
+        }),
     }
 }
 
@@ -267,11 +302,13 @@ fn parse_test_results(output: &str) -> commit::TestResults {
 
 /// Construeix el router d'axum amb els endpoints.
 fn build_router() -> axum::Router {
-    use axum::routing::post;
+    use axum::routing::{get, post};
     use tower_http::trace::TraceLayer;
 
     axum::Router::new()
         .route("/compile", post(compile_handler))
+        .route("/context", get(get_context_handler))
+        .route("/context/task", post(add_task_handler))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -291,6 +328,67 @@ async fn compile_handler(
     .await;
 
     axum::response::Json(serde_json::to_value(&result).unwrap())
+}
+
+/// Handler de GET /context — retorna el context actual del projecte.
+async fn get_context_handler() -> axum::response::Json<serde_json::Value> {
+    let repo_path = workspace_root();
+
+    // Inicialitzar si no existeix
+    let _ = todo_context::init_context_if_missing(&repo_path);
+
+    // Carregar context
+    match todo_context::load_context(&repo_path) {
+        Ok(context) => {
+            axum::response::Json(serde_json::to_value(&context).unwrap())
+        }
+        Err(e) => {
+            // Retornar error com a JSON (el caller gestiona el status)
+            axum::response::Json(serde_json::json!({ "error": e }))
+        }
+    }
+}
+
+/// Petició per afegir una tasca.
+#[derive(Debug, Deserialize)]
+struct AddTaskRequest {
+    description: String,
+}
+
+/// Handler de POST /context/task — afegeix una nova tasca.
+async fn add_task_handler(
+    axum::extract::Json(payload): axum::extract::Json<AddTaskRequest>,
+) -> axum::response::Json<serde_json::Value> {
+    let repo_path = workspace_root();
+
+    // Inicialitzar si no existeix
+    let _ = todo_context::init_context_if_missing(&repo_path);
+
+    // Carregar context
+    let mut context = match todo_context::load_context(&repo_path) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return axum::response::Json(serde_json::json!({
+                "error": format!("Error carregant context: {}", e)
+            }));
+        }
+    };
+
+    // Afegir tasca
+    let new_id = context.add_task(&payload.description);
+
+    // Guardar
+    if let Err(e) = todo_context::save_context(&repo_path, &context) {
+        return axum::response::Json(serde_json::json!({
+            "error": format!("Error guardant context: {}", e)
+        }));
+    }
+
+    axum::response::Json(serde_json::json!({
+        "message": "Tasca afegida correctament",
+        "task_id": new_id,
+        "task": context.tasks.iter().find(|t| t.id == new_id).unwrap()
+    }))
 }
 
 fn main() {
@@ -370,6 +468,7 @@ fn mode_console(_rt: &tokio::runtime::Runtime) {
                         message: format!("JSON invàlid: {e}. Intentant com a codi simple..."),
                         commit_hash: None,
                         commit_message: None,
+                        completed_tasks: serde_json::Value::Null,
                     }
                 }
             }
@@ -522,6 +621,118 @@ mod tests {
         assert_eq!(body["status"], "Success");
 
         // Aturar el servidor
+        server.abort();
+        let _ = server.await;
+    }
+
+    // ========================================================================
+    // Test d'integració complet — Regla d'Or 3: Context Atòmic
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_http_full_context_workflow() {
+        // Preparar: crear un context amb tasques
+        let repo_path = workspace_root();
+        let json_path = repo_path.join("todo-context.json");
+
+        // Escriure un context inicial amb una tasca pending
+        let initial_context = serde_json::json!({
+            "project_name": "Aether Code",
+            "current_stage": "Dev",
+            "tasks": [
+                { "id": 1, "description": "Tasca antiga", "status": "completed" },
+                { "id": 2, "description": "Tasca en curs", "status": "in_progress" },
+                { "id": 3, "description": "Tasca futura", "status": "pending" }
+            ]
+        });
+        std::fs::write(&json_path, serde_json::to_string_pretty(&initial_context).unwrap())
+            .unwrap();
+
+        // Arrencar el servidor
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = build_router();
+
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        let client = reqwest::Client::new();
+        let base_url = format!("http://127.0.0.1:{port}");
+
+        // 1. Verificar GET /context
+        let response = client
+            .get(format!("{base_url}/context"))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+
+        let context: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(context["project_name"], "Aether Code");
+        assert_eq!(context["tasks"].as_array().unwrap().len(), 3);
+
+        // 2. Afegir una nova tasca amb POST /context/task
+        let response = client
+            .post(format!("{base_url}/context/task"))
+            .json(&serde_json::json!({
+                "description": "Nova tasca des del mòbil"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+
+        let add_response: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(add_response["message"], "Tasca afegida correctament");
+        let new_task_id = add_response["task_id"].as_u64().unwrap();
+        assert_eq!(new_task_id, 4);
+
+        // 3. Marcar la tasca 3 (pending) com a in_progress
+        let mut ctx = serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(&json_path).unwrap()
+        ).unwrap();
+        ctx["tasks"][2]["status"] = serde_json::json!("in_progress");
+        std::fs::write(&json_path, serde_json::to_string_pretty(&ctx).unwrap()).unwrap();
+
+        // 4. Enviar codi vàlid a /compile
+        let response = client
+            .post(format!("{base_url}/compile"))
+            .json(&serde_json::json!({
+                "code": "fn main() { println!(\"Workflow OK!\"); }",
+                "todo_status": "QA"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+
+        let compile_response: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(compile_response["status"], "Success");
+
+        // 5. Verificar que la tasca in_progress s'ha completat
+        let context_response = client
+            .get(format!("{base_url}/context"))
+            .send()
+            .await
+            .unwrap();
+        let final_context: serde_json::Value = context_response.json().await.unwrap();
+
+        // La tasca 3 (in_progress) hauria de ser completed
+        let task3_status = &final_context["tasks"][2]["status"];
+        assert_eq!(task3_status, "completed", "La tasca in_progress ha de ser completed");
+
+        // La tasca 4 (pending) hauria de ser in_progress
+        let task4_status = &final_context["tasks"][3]["status"];
+        assert_eq!(task4_status, "in_progress", "La primera tasca pending ha de ser in_progress");
+
+        // El stage s'ha actualitzat a QA
+        assert_eq!(final_context["current_stage"], "QA");
+
+        // Netejar
+        let _ = std::fs::remove_file(&json_path);
         server.abort();
         let _ = server.await;
     }

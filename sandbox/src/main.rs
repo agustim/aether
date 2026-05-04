@@ -1,1 +1,1 @@
-fn main() { println!("Hola"); }
+fn main() { println!("HTTP OK!"); }
