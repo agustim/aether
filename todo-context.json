@@ -1,51 +1,56 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "QA",
+  "current_stage": "complete",
   "tasks": [
     {
       "id": 1,
-      "description": "Implementar Compiler-Agent bàsic",
+      "description": "Tasca 1",
       "status": "completed"
     },
     {
       "id": 2,
-      "description": "Integrar git2-rs per a commits automàtics",
+      "description": "Tasca 2",
       "status": "completed"
     },
     {
       "id": 3,
-      "description": "Exposar endpoint HTTP /compile",
+      "description": "Tasca 3",
       "status": "completed"
     },
     {
       "id": 4,
-      "description": "Gestió d'estat amb todo-context.json",
+      "description": "Tasca 4",
       "status": "completed"
     },
     {
       "id": 5,
-      "description": "Sandbox Docker aïllat sense xarxa",
+      "description": "Tasca 5",
       "status": "completed"
     },
     {
       "id": 6,
-      "description": "Provar servidor HTTP des de mòbil",
+      "description": "Tasca 6",
       "status": "completed"
     },
     {
       "id": 7,
-      "description": "Sistema d'Intencions i Analista IA",
+      "description": "Tasca 7",
       "status": "completed"
     },
     {
       "id": 8,
-      "description": "Afegir autenticació basic",
+      "description": "Analitzar requisits de: Vull que el sistema saludi en català",
       "status": "completed"
     },
     {
-      "id": 9,
-      "description": "Crear interfície web mobile-first",
-      "status": "completed"
+      "id": 10,
+      "description": "Implementar funcionalitat: Vull que el sistema saludi en català",
+      "status": "in_progress"
+    },
+    {
+      "id": 13,
+      "description": "Crear tests per validar: Vull que el sistema saludi en català",
+      "status": "pending"
     }
   ]
 }

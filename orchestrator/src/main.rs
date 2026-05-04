@@ -17,6 +17,7 @@ pub mod commit;
 pub mod todo_context;
 pub mod docker_sandbox;
 pub mod intent_analyst;
+pub mod llm_client;
 use todo_context::TaskStatus;
 
 /// Estat de la compilació.
@@ -430,17 +431,21 @@ async fn intent_handler(
         }
     };
 
-    // Generar proposta (utilitzar mock per defecte)
+    // Generar proposta (utilitzar mock per defecte, LLM si AI_USE_MOCK=false)
     let use_mock = std::env::var("AI_USE_MOCK").unwrap_or_else(|_| "true".into()) == "true";
     
-    match intent_analyst::generate_proposal(&payload.intent, &context_text, use_mock) {
+    match intent_analyst::generate_proposal(&payload.intent, &context_text, use_mock).await {
         Ok(proposal) => {
             // Guardar la proposta a proposals.json
             let proposals_path = repo_path.join("proposals.json");
             let proposals_text = std::fs::read_to_string(&proposals_path).unwrap_or_else(|_| "[]".into());
-            let mut proposals: Vec<intent_analyst::IntentProposal> = serde_json::from_str(&proposals_text).unwrap_or_else(|_| Vec::new());
+            let mut proposals: Vec<intent_analyst::IntentProposal> =
+                serde_json::from_str(&proposals_text).unwrap_or_else(|_| Vec::new());
             proposals.push(proposal.clone());
-            std::fs::write(&proposals_path, serde_json::to_string_pretty(&proposals).unwrap()).ok();
+            std::fs::write(
+                &proposals_path,
+                serde_json::to_string_pretty(&proposals).unwrap_or_else(|_| "[]".into()),
+            ).ok();
             
             axum::response::Json(serde_json::to_value(&proposal).unwrap())
         }

@@ -1,16 +1,17 @@
 //! Mòdul d'Analista d'Intencions
 //!
 //! Transforma 'Intencions' lliures de l'usuari en 'Tasques' tècniques
-//! utilitzant IA (Qwen) amb el context actual del projecte.
+//! utilitzant IA (LLM) amb el context actual del projecte.
 //!
 //! Flux:
 //! 1. Usuari envia POST /intent amb text lliure
-//! 2. Analista genera proposta de tasques tècniques
+//! 2. Analista genera proposta de tasques tècniques (via LLM o mock)
 //! 3. Usuari aprova via POST /context/approve
 //! 4. Tasques s'afegeixen al context
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use crate::llm_client;
 
 /// Petició per enviar una intenció.
 #[derive(Debug, Deserialize)]
@@ -82,9 +83,13 @@ pub struct ApproveResponse {
 
 /// Genera una proposta de tasques a partir d'una intenció.
 ///
-/// Aquesta funció simula la crida a l'IA (Qwen). En producció,
-/// faria una crida real a l'API. Per a tests, utilitza un mock.
-pub fn generate_proposal(
+/// Aquesta funció utilitza el LLM (si està configurat) o el mock.
+///
+/// Paràmetres:
+/// - `intent`: Text lliure de la intenció de l'usuari
+/// - `current_context`: Contingut de todo-context.json
+/// - `use_mock`: Si és true, utilitza el mock en lloc del LLM
+pub async fn generate_proposal(
     intent: &str,
     current_context: &str,
     use_mock: bool,
@@ -92,30 +97,79 @@ pub fn generate_proposal(
     if use_mock {
         generate_mock_proposal(intent, current_context)
     } else {
-        generate_ai_proposal(intent, current_context)
+        generate_llm_proposal(intent, current_context).await
     }
 }
 
-/// Versió real amb IA (Qwen API).
-fn generate_ai_proposal(intent: &str, _context: &str) -> Result<IntentProposal, String> {
-    let _api_key = std::env::var("AI_API_KEY").map_err(|_| {
-        "AI_API_KEY no configurada. Configura la clau d'API de Qwen.".to_string()
-    })?;
+/// Versió amb LLM real (via llm_client).
+async fn generate_llm_proposal(
+    intent: &str,
+    context: &str,
+) -> Result<IntentProposal, String> {
+    // Carregar configuració del LLM
+    let config = llm_client::LLMConfig::from_env()
+        .map_err(|e| format!("Configuració LLM incorrecta: {e}"))?;
 
-    // Construir el prompt per a l'IA
-    let _prompt = format!(
-        "Eres un analista tècnic expert en Rust. Transforma la següent intenció d'usuari \
-        en tasques tècniques concretes i implementables.\n\n\
-        Intenció: {}\n\n\
-        Context actual del projecte:\n{}\n\n\
-        Retorna només un JSON amb aquest format:\n\
-        {{\n  \"explanation\": \"explicació breu\",\n  \"tasks\": [\n    {{\n      \"description\": \"descripció tècnica\",\n      \"status\": \"pending\"\n    }}\n  ]\n}}",
-        intent, _context
-    );
+    if !config.is_valid() {
+        return Err("Configuració LLM invàlida. Verifica AETHER_LLM_URL, AETHER_LLM_KEY i AETHER_LLM_MODEL.".into());
+    }
 
-    // Simular crida a l'API (aqui aniria la crida real a Qwen)
-    // Per ara, retornem una resposta mock que es pot substituir
-    generate_mock_proposal(intent, _context)
+    // Construir prompts
+    let system_prompt = llm_client::build_system_prompt();
+    let user_prompt = llm_client::build_context_prompt(context);
+
+    // Afegir la intenció de l'usuari al prompt
+    let user_prompt = format!("{}\n\nIntenció de l'usuari: {}", user_prompt, intent);
+
+    // Cridar al LLM
+    let result = llm_client::call_llm(&config, &system_prompt, &user_prompt).await;
+
+    let llm_result = result.map_err(|e| format!("Error cridant LLM: {e}"))?;
+
+    if !llm_result.success {
+        return Err(format!("Error cridant LLM: {}", llm_result.error.unwrap_or_default()));
+    }
+
+    // Parsejar la resposta
+    let parsed = llm_client::parse_llm_response(&llm_result.content)
+        .map_err(|e| format!("Error parsejant resposta del LLM: {e}"))?;
+
+    // Convertir a IntentProposal
+    let explanation = parsed
+        .get("explanation")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Proposta generada pel LLM")
+        .to_string();
+
+    let tasks_array = parsed
+        .get("tasks")
+        .and_then(|v| v.as_array())
+        .ok_or("La resposta del LLM no conté 'tasks' vàlid")?;
+
+    let mut tasks = Vec::new();
+    let mut proposal_id = 1u32;
+
+    for task_obj in tasks_array {
+        let description = task_obj
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Tasca sense descripció")
+            .to_string();
+
+        tasks.push(TechnicalTask {
+            id: proposal_id,
+            description,
+            status: TaskStatus::Proposal,
+        });
+        proposal_id += 1;
+    }
+
+    Ok(IntentProposal {
+        proposal_id: 1,
+        original_intent: intent.to_string(),
+        tasks,
+        explanation,
+    })
 }
 
 /// Versió mock per a tests.
