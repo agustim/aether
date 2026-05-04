@@ -2,9 +2,5 @@
 
 ## Estat actual
 
-Status: complete
-Description: Regla d'Or 6 implementada
-
-## Tasques pendents
-
-- [ ] 1. Afegir tests
+Status: in-progress
+Description: Compilació via HTTP
