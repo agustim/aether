@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: Interfície de Telegram (telegram_bot.rs)
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests
