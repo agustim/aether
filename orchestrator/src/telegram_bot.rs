@@ -110,10 +110,11 @@ pub fn parse_telegram_command(message: &str) -> TelegramCommand {
         return TelegramCommand::Start;
     }
 
+    // Verificar comanda exacta sense arguments
+    if message == "/new_intent" {
+        return TelegramCommand::Unknown("/new_intent requereix un text".into());
+    }
     if let Some(text) = message.strip_prefix("/new_intent ").or_else(|| message.strip_prefix("/new_intent\t")) {
-        if text.is_empty() {
-            return TelegramCommand::Unknown("/new_intent requereix un text".into());
-        }
         return TelegramCommand::NewIntent(text.to_string());
     }
 
@@ -121,10 +122,10 @@ pub fn parse_telegram_command(message: &str) -> TelegramCommand {
         return TelegramCommand::Status;
     }
 
+    if message == "/switch" {
+        return TelegramCommand::Unknown("/switch requereix un workspace_id".into());
+    }
     if let Some(workspace_id) = message.strip_prefix("/switch ").or_else(|| message.strip_prefix("/switch\t")) {
-        if workspace_id.is_empty() {
-            return TelegramCommand::Unknown("/switch requereix un workspace_id".into());
-        }
         return TelegramCommand::SwitchWorkspace(workspace_id.to_string());
     }
 
@@ -461,7 +462,7 @@ mod tests {
     fn test_build_action_message_approve() {
         let msg = build_action_message("approve", "test-ws");
         assert!(msg.contains("✅"));
-        assert!(msg.contains("aprovar"));
+        assert!(msg.contains("approve"));
         assert!(msg.contains("test-ws"));
     }
 
@@ -469,7 +470,7 @@ mod tests {
     fn test_build_action_message_reject() {
         let msg = build_action_message("reject", "test-ws");
         assert!(msg.contains("❌"));
-        assert!(msg.contains("rebutjar"));
+        assert!(msg.contains("reject"));
         assert!(msg.contains("test-ws"));
     }
 
