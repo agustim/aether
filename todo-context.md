@@ -2,5 +2,5 @@
 
 ## Estat actual
 
-Status: in-progress
+Status: QA
 Description: Compilació via HTTP
