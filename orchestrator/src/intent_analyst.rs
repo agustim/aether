@@ -194,12 +194,12 @@ fn generate_mock_proposal(
 /// Aprova una proposta i afegeix les tasques al context.
 pub fn approve_proposal(
     proposal: &IntentProposal,
-    context_path: &Path,
+    context_dir: &Path,
 ) -> Result<ApproveResponse, String> {
     use crate::todo_context::{load_context, save_context, Task};
 
     // Carregar context actual
-    let mut context = load_context(context_path)
+    let mut context = load_context(context_dir)
         .map_err(|e| format!("Error carregant context: {e}"))?;
 
     // Convertir tasques de proposta a tasques del context
@@ -214,7 +214,7 @@ pub fn approve_proposal(
     }
 
     // Guardar context actualitzat
-    save_context(context_path, &context)
+    save_context(context_dir, &context)
         .map_err(|e| format!("Error guardant context: {e}"))?;
 
     Ok(ApproveResponse {
@@ -285,8 +285,9 @@ mod tests {
             explanation: "Test explanation".into(),
         };
 
-        let result = approve_proposal(&proposal, &context_path);
-        assert!(result.is_ok(), "Aprovar proposta hauria de funcionar");
+        //approve_proposal espera el directori, no el fitxer
+        let result = approve_proposal(&proposal, &tmp);
+        assert!(result.is_ok(), "Aprovar proposta hauria de funcionar: {:?}", result);
 
         let result = result.unwrap();
         assert_eq!(result.tasks_added, 2);
