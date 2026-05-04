@@ -3,4 +3,4 @@
 ## Estat actual
 
 Status: in-progress
-Description: Compilació via HTTP
+Description: Regla d'Or 6 implementada
