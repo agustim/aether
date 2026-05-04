@@ -1,6 +1,6 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "complete",
+  "current_stage": "Analyst",
   "tasks": [
     {
       "id": 1,
@@ -40,17 +40,17 @@
     {
       "id": 8,
       "description": "Analitzar requisits de: Vull que el sistema saludi en català",
-      "status": "completed"
+      "status": "in_progress"
     },
     {
       "id": 10,
       "description": "Implementar funcionalitat: Vull que el sistema saludi en català",
-      "status": "completed"
+      "status": "pending"
     },
     {
       "id": 13,
       "description": "Crear tests per validar: Vull que el sistema saludi en català",
-      "status": "in_progress"
+      "status": "pending"
     }
   ]
 }
