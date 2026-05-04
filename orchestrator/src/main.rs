@@ -457,7 +457,6 @@ async fn approve_handler(
     axum::extract::Json(payload): axum::extract::Json<intent_analyst::ApproveRequest>,
 ) -> axum::response::Json<serde_json::Value> {
     let repo_path = workspace_root();
-    let context_path = repo_path.join("todo-context.json");
 
     // Carregar totes les propostes guardades
     let proposals_path = repo_path.join("proposals.json");
@@ -478,8 +477,8 @@ async fn approve_handler(
         }
     };
 
-    // Aprovar la proposta
-    match intent_analyst::approve_proposal(&proposal, &context_path) {
+    // Aprovar la proposta (passar directori, no fitxer)
+    match intent_analyst::approve_proposal(&proposal, &repo_path) {
         Ok(response) => axum::response::Json(serde_json::to_value(&response).unwrap()),
         Err(e) => axum::response::Json(serde_json::json!({
             "status": "error",
@@ -939,8 +938,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_http_intent_analyst_full_workflow() {
-        // Preparar: netejar proposals
+        // Preparar: crear context i netejar proposals
         let repo_path = workspace_root();
+        let context_path = repo_path.join("todo-context.json");
+        
+        // Escriure un context inicial
+        let initial_context = serde_json::json!({
+            "project_name": "Aether Code",
+            "current_stage": "Analyst",
+            "tasks": [
+                { "id": 1, "description": "Tasca 1", "status": "completed" },
+                { "id": 2, "description": "Tasca 2", "status": "completed" },
+                { "id": 3, "description": "Tasca 3", "status": "completed" },
+                { "id": 4, "description": "Tasca 4", "status": "completed" },
+                { "id": 5, "description": "Tasca 5", "status": "completed" },
+                { "id": 6, "description": "Tasca 6", "status": "completed" },
+                { "id": 7, "description": "Tasca 7", "status": "in_progress" }
+            ]
+        });
+        std::fs::write(&context_path, serde_json::to_string_pretty(&initial_context).unwrap()).ok();
+        
         let proposals_path = repo_path.join("proposals.json");
         let _ = std::fs::remove_file(&proposals_path);
 
@@ -970,7 +987,9 @@ mod tests {
         assert!(response.status().is_success());
 
         // 2. Verificar que es rep una proposta amb format correcte
-        let proposal: serde_json::Value = response.json().await.unwrap();
+        let proposal_text = response.text().await.unwrap();
+        eprintln!("DEBUG intent response: {}", proposal_text);
+        let proposal: serde_json::Value = serde_json::from_str(&proposal_text).unwrap();
         assert_eq!(proposal["status"], serde_json::Value::Null, "La proposta no ha de tenir status (èxit)");
         assert!(proposal["proposal_id"].is_number(), "Ha de tenir proposal_id");
         assert!(proposal["original_intent"].is_string(), "Ha de tenir original_intent");
@@ -997,9 +1016,12 @@ mod tests {
             .send()
             .await
             .unwrap();
-        assert!(response.status().is_success());
+        let status = response.status();
+        let approve_text = response.text().await.unwrap();
+        eprintln!("DEBUG approve response: {}", approve_text);
+        assert!(status.is_success());
 
-        let approve_response: serde_json::Value = response.json().await.unwrap();
+        let approve_response: serde_json::Value = serde_json::from_str(&approve_text).unwrap();
         assert_eq!(approve_response["status"], "success");
         assert!(approve_response["tasks_added"].is_number());
         let tasks_added = approve_response["tasks_added"].as_u64().unwrap();
@@ -1013,8 +1035,8 @@ mod tests {
             .unwrap();
         let final_context: serde_json::Value = context_response.json().await.unwrap();
 
-        // El nombre de tasques ha augmentat
-        let initial_tasks = 7u64; // Tasques inicials al context
+        // El nombre de tasques ha augmentat (7 inicials + les afegides)
+        let initial_tasks = 7u64;
         let current_tasks = final_context["tasks"].as_array().unwrap().len() as u64;
         assert_eq!(current_tasks, initial_tasks + tasks_added, 
             "El context ha de tenir tasques inicials + afegides");

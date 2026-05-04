@@ -1,0 +1,24 @@
+[
+  {
+    "proposal_id": 1,
+    "original_intent": "Vull que el sistema saludi en català",
+    "tasks": [
+      {
+        "id": 1,
+        "description": "Analitzar requisits de: Vull que el sistema saludi en català",
+        "status": "proposal"
+      },
+      {
+        "id": 2,
+        "description": "Implementar funcionalitat: Vull que el sistema saludi en català",
+        "status": "proposal"
+      },
+      {
+        "id": 3,
+        "description": "Crear tests per validar: Vull que el sistema saludi en català",
+        "status": "proposal"
+      }
+    ],
+    "explanation": "S'han generat 3 tasques tècniques basades en la intenció: Vull que el sistema saludi en català"
+  }
+]
