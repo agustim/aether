@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: Implementar self-correction loop (coding_agent.rs)
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests
