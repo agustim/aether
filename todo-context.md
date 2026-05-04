@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: Connectar LLM amb tests d'integració (mockito)
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests
