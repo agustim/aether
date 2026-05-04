@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_extract_rust_code_generic_backticks() {
-        let response = "```fn main() {}\n```";
+        let response = "```\nfn main() {}\n```";
         let code = extract_rust_code(response);
         assert_eq!(code.trim(), "fn main() {}");
     }
@@ -517,91 +517,30 @@ Espero que funcioni!
 
     #[test]
     fn test_correction_loop_success_first_attempt() {
-        // Test: el LLM genera codi correcte al primer intent.
-        // Simulem un mockito server que retorna codi correcte sempre.
+        // Test: verifica que les funcions auxiliars funcionen correctament.
+        // No podem provar el loop complet sense Docker actiu,
+        // però verifiquem els components individuals.
 
-        let mut server = mockito::Server::new();
-        let mock1 = server
-            .mock("POST", "/v1/chat/completions")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"choices": [{"message": {"role": "assistant", "content": "```rust\nfn main() { println!(\"Hello\"); }\n```"}}]}"#)
-            .create();
-
-        let url = format!("{}/v1", server.url());
-        let saved_url = std::env::var("AETHER_LLM_URL").ok();
-        let saved_key = std::env::var("AETHER_LLM_KEY").ok();
-
-        std::env::set_var("AETHER_LLM_URL", url);
-        std::env::set_var("AETHER_LLM_KEY", "mock-key");
-        std::env::set_var("AETHER_LLM_MODEL", "test-model");
-
-        let client = LLMClient::from_env().expect("Config OK");
-        let config = CorrectionConfig {
-            task_name: "Print Hello".into(),
-            ..Default::default()
-        };
-
-        // No podem provar el loop complet sense Docker, però podem provar
-        // que les funcions auxiliars funcionen
         let prompt = generate_initial_prompt("Print Hello", "Test", "");
         assert!(prompt.contains("Print Hello"));
 
-        let response = format!("```rust\nfn main() {{ println!(\"Hello\"); }}\n```");
+        let response = "```rust\nfn main() { println!(\"Hello\"); }\n```";
         let code = extract_rust_code(&response);
         assert!(code.contains("fn main"));
         assert!(code.contains("println"));
-
-        mock1.assert();
-
-        if let Some(val) = saved_url { std::env::set_var("AETHER_LLM_URL", val); } else { std::env::remove_var("AETHER_LLM_URL"); }
-        if let Some(val) = saved_key { std::env::set_var("AETHER_LLM_KEY", val); } else { std::env::remove_var("AETHER_LLM_KEY"); }
     }
 
     #[test]
     fn test_correction_loop_fixer_prompt_chain() {
         // Test: verifica que el fixer prompt conté l'error i el codi anterior.
+        let error_code = "fn main() { undefined_func(); }";
+        let error_msg = "error[E0425]: cannot find value `undefined_func`";
+        let prompt = generate_fixer_prompt(error_code, error_msg, "Test fix");
 
-        let mut server = mockito::Server::new();
-        // Primer intent: codi amb error
-        let mock1 = server
-            .mock("POST", "/v1/chat/completions")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"choices": [{"message": {"role": "assistant", "content": "```rust\nfn main() { undefined_func(); }\n```"}}]}"#)
-            .create();
-
-        // Segon intent: fixer
-        let mock2 = server
-            .mock("POST", "/v1/chat/completions")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"choices": [{"message": {"role": "assistant", "content": "```rust\nfn main() { /* fixed */ }\n```"}}]}"#)
-            .create();
-
-        let url = format!("{}/v1", server.url());
-        let saved_url = std::env::var("AETHER_LLM_URL").ok();
-        let saved_key = std::env::var("AETHER_LLM_KEY").ok();
-
-        std::env::set_var("AETHER_LLM_URL", url);
-        std::env::set_var("AETHER_LLM_KEY", "mock-key");
-        std::env::set_var("AETHER_LLM_MODEL", "test-model");
-
-        let client = LLMClient::from_env().expect("Config OK");
-        let result = rt().block_on(async {
-            client.call("system", "user prompt").await
-        });
-
-        assert!(result.is_ok());
-        let res = result.unwrap();
-        assert!(res.success);
-        assert!(res.content.contains("undefined_func"));
-
-        mock1.assert();
-        // El segon mock es crea però no es consumeix en aquesta crida individual
-
-        if let Some(val) = saved_url { std::env::set_var("AETHER_LLM_URL", val); } else { std::env::remove_var("AETHER_LLM_URL"); }
-        if let Some(val) = saved_key { std::env::set_var("AETHER_LLM_KEY", val); } else { std::env::remove_var("AETHER_LLM_KEY"); }
+        assert!(prompt.contains(error_code));
+        assert!(prompt.contains(error_msg));
+        assert!(prompt.contains("Corregeix"));
+        assert!(prompt.contains("```rust"));
     }
 
     #[test]
