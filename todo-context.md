@@ -3,4 +3,4 @@
 ## Estat actual
 
 Status: in-progress
-Description: Evolució a git2-rs
+Description: Regla d'Or 6 implementada
