@@ -932,4 +932,96 @@ mod tests {
         server.abort();
         let _ = server.await;
     }
+
+    // ========================================================================
+    // Test d'integració complet — Intent Analyst (Regla 5)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_http_intent_analyst_full_workflow() {
+        // Preparar: netejar proposals
+        let repo_path = workspace_root();
+        let proposals_path = repo_path.join("proposals.json");
+        let _ = std::fs::remove_file(&proposals_path);
+
+        // Arrencar el servidor
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = build_router();
+
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        let client = reqwest::Client::new();
+        let base_url = format!("http://127.0.0.1:{port}");
+
+        // 1. Enviar una intenció via POST /intent
+        let response = client
+            .post(format!("{base_url}/intent"))
+            .json(&serde_json::json!({
+                "intent": "Vull que el sistema saludi en català"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+
+        // 2. Verificar que es rep una proposta amb format correcte
+        let proposal: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(proposal["status"], serde_json::Value::Null, "La proposta no ha de tenir status (èxit)");
+        assert!(proposal["proposal_id"].is_number(), "Ha de tenir proposal_id");
+        assert!(proposal["original_intent"].is_string(), "Ha de tenir original_intent");
+        assert!(proposal["tasks"].is_array(), "Ha de tenir tasks com array");
+        assert!(proposal["explanation"].is_string(), "Ha de tenir explanation");
+
+        let tasks = proposal["tasks"].as_array().unwrap();
+        assert!(!tasks.is_empty(), "La proposta ha de tenir almenys una tasca");
+        
+        // Verificar estructura de tasques
+        let task = &tasks[0];
+        assert!(task["id"].is_number(), "Tasca ha de tenir id");
+        assert!(task["description"].is_string(), "Tasca ha de tenir description");
+        assert_eq!(task["status"], "proposal", "Tasca ha de ser proposal");
+
+        let proposal_id = proposal["proposal_id"].as_u64().unwrap();
+
+        // 3. Aprovar la proposta via POST /context/approve
+        let response = client
+            .post(format!("{base_url}/context/approve"))
+            .json(&serde_json::json!({
+                "proposal_id": proposal_id
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+
+        let approve_response: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(approve_response["status"], "success");
+        assert!(approve_response["tasks_added"].is_number());
+        let tasks_added = approve_response["tasks_added"].as_u64().unwrap();
+        assert!(tasks_added > 0, "Ha d'afegir almenys una tasca");
+
+        // 4. Verificar que les tasques s'han afegit al context
+        let context_response = client
+            .get(format!("{base_url}/context"))
+            .send()
+            .await
+            .unwrap();
+        let final_context: serde_json::Value = context_response.json().await.unwrap();
+
+        // El nombre de tasques ha augmentat
+        let initial_tasks = 7u64; // Tasques inicials al context
+        let current_tasks = final_context["tasks"].as_array().unwrap().len() as u64;
+        assert_eq!(current_tasks, initial_tasks + tasks_added, 
+            "El context ha de tenir tasques inicials + afegides");
+
+        // Netejar
+        let _ = std::fs::remove_file(&proposals_path);
+        server.abort();
+        let _ = server.await;
+    }
 }
