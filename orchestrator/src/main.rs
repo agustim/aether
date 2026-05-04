@@ -595,6 +595,9 @@ async fn add_task_handler(
 }
 
 fn main() {
+    // Carregar .env si existeix
+    let _ = dotenvy::dotenv();
+
     // Inicialitzar logging
     tracing_subscriber::fmt()
         .with_env_filter(
