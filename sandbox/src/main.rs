@@ -1,1 +1,1 @@
-fn main() { println!("Commit OK"); }
+fn main() { println!("git2-rs Test OK"); }
