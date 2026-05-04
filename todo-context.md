@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: HTTP + Telegram integrats amb tracing
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests
