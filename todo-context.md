@@ -3,4 +3,8 @@
 ## Estat actual
 
 Status: complete
-Description: Multi-workspace & permission system (workspace_manager.rs)
+Description: Regla d'Or 6 implementada
+
+## Tasques pendents
+
+- [ ] 1. Afegir tests
