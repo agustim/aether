@@ -670,7 +670,9 @@ mod tests {
             .unwrap();
         assert!(response.status().is_success());
 
-        let context: serde_json::Value = response.json().await.unwrap();
+        let context_text = response.text().await.unwrap();
+        eprintln!("DEBUG context response: {}", context_text);
+        let context: serde_json::Value = serde_json::from_str(&context_text).unwrap();
         assert_eq!(context["project_name"], "Aether Code");
         assert_eq!(context["tasks"].as_array().unwrap().len(), 3);
 

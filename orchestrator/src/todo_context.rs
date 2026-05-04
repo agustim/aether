@@ -15,6 +15,7 @@ pub struct Task {
 
 /// Estat d'una tasca.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
     InProgress,
