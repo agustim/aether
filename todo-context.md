@@ -2,5 +2,5 @@
 
 ## Estat actual
 
-Status: in-progress
-Description: Compilació via HTTP
+Status: complete
+Description: Connectar LLM amb tests d'integració (mockito)
