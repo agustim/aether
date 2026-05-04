@@ -292,8 +292,8 @@ mod tests {
         let result = result.unwrap();
         assert_eq!(result.tasks_added, 2);
 
-        // Verificar que les tasques s'han afegit
-        let loaded = todo_context::load_context(&context_path).unwrap();
+        // Verificar que les tasques s'han afegit (passar directori, no fitxer)
+        let loaded = todo_context::load_context(&tmp).unwrap();
         assert_eq!(loaded.tasks.len(), 2);
 
         // Netejar

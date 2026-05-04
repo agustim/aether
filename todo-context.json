@@ -1,26 +1,5 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "QA",
-  "tasks": [
-    {
-      "id": 1,
-      "description": "Tasca antiga",
-      "status": "completed"
-    },
-    {
-      "id": 2,
-      "description": "Tasca en curs",
-      "status": "completed"
-    },
-    {
-      "id": 3,
-      "description": "Tasca futura",
-      "status": "completed"
-    },
-    {
-      "id": 4,
-      "description": "Nova tasca des del mòbil",
-      "status": "in_progress"
-    }
-  ]
+  "current_stage": "complete",
+  "tasks": []
 }
