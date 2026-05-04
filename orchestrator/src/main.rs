@@ -159,19 +159,18 @@ async fn build_and_commit(
 
     // Si la compilació ha funcionat:
     // 1. Completar la tasca in_progress
-    // 2. Fer el commit
+    // 2. Marcar la primera pending com a in_progress
+    // 3. Fer el commit
     let mut completed_task_count = 0u32;
 
     if let Ok(mut context) = todo_context::load_context(&repo_path) {
         completed_task_count = context.complete_current_task();
 
-        // Si hi ha tasques pending, marcar la primera com a in_progress
-        if completed_task_count == 0 {
-            for task in &mut context.tasks {
-                if task.status == TaskStatus::Pending {
-                    task.status = TaskStatus::InProgress;
-                    break;
-                }
+        // Sempre marcar la primera tasca pending com a in_progress
+        for task in &mut context.tasks {
+            if task.status == TaskStatus::Pending {
+                task.status = TaskStatus::InProgress;
+                break;
             }
         }
 
@@ -670,9 +669,7 @@ mod tests {
             .unwrap();
         assert!(response.status().is_success());
 
-        let context_text = response.text().await.unwrap();
-        eprintln!("DEBUG context response: {}", context_text);
-        let context: serde_json::Value = serde_json::from_str(&context_text).unwrap();
+        let context: serde_json::Value = response.json().await.unwrap();
         assert_eq!(context["project_name"], "Aether Code");
         assert_eq!(context["tasks"].as_array().unwrap().len(), 3);
 
