@@ -7,7 +7,9 @@
       "Bash(cargo clippy)",
       "Bash(git init)",
       "Bash(cargo run *)",
-      "Bash(rm *)"
+      "Bash(rm *)",
+      "Bash(sleep *)",
+      "Bash(curl *)"
     ]
   },
   "$version": 3
