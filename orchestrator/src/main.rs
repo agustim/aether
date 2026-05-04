@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 pub mod commit;
 pub mod todo_context;
 pub mod docker_sandbox;
+pub mod intent_analyst;
 use todo_context::TaskStatus;
 
 /// Estat de la compilació.
@@ -404,8 +405,88 @@ fn build_router() -> axum::Router {
         .route("/compile", post(compile_handler))
         .route("/context", get(get_context_handler))
         .route("/context/task", post(add_task_handler))
+        .route("/context/approve", post(approve_handler))
         .route("/docker/build", post(docker_build_handler))
+        .route("/intent", post(intent_handler))
         .layer(TraceLayer::new_for_http())
+}
+
+/// Handler per POST /intent — rep una intenció i genera una proposta.
+async fn intent_handler(
+    axum::extract::Json(payload): axum::extract::Json<intent_analyst::IntentRequest>,
+) -> axum::response::Json<serde_json::Value> {
+    let repo_path = workspace_root();
+
+    // Carregar context actual
+    let context_path = repo_path.join("todo-context.json");
+    let context_text = match std::fs::read_to_string(&context_path) {
+        Ok(text) => text,
+        Err(e) => {
+            return axum::response::Json(serde_json::json!({
+                "status": "error",
+                "message": format!("Error carregant context: {}", e),
+                "proposal": null
+            }));
+        }
+    };
+
+    // Generar proposta (utilitzar mock per defecte)
+    let use_mock = std::env::var("AI_USE_MOCK").unwrap_or_else(|_| "true".into()) == "true";
+    
+    match intent_analyst::generate_proposal(&payload.intent, &context_text, use_mock) {
+        Ok(proposal) => {
+            // Guardar la proposta a proposals.json
+            let proposals_path = repo_path.join("proposals.json");
+            let proposals_text = std::fs::read_to_string(&proposals_path).unwrap_or_else(|_| "[]".into());
+            let mut proposals: Vec<intent_analyst::IntentProposal> = serde_json::from_str(&proposals_text).unwrap_or_else(|_| Vec::new());
+            proposals.push(proposal.clone());
+            std::fs::write(&proposals_path, serde_json::to_string_pretty(&proposals).unwrap()).ok();
+            
+            axum::response::Json(serde_json::to_value(&proposal).unwrap())
+        }
+        Err(e) => axum::response::Json(serde_json::json!({
+            "status": "error",
+            "message": format!("Error generant proposta: {}", e),
+            "proposal": null
+        })),
+    }
+}
+
+/// Handler per POST /context/approve — aprova una proposta.
+async fn approve_handler(
+    axum::extract::Json(payload): axum::extract::Json<intent_analyst::ApproveRequest>,
+) -> axum::response::Json<serde_json::Value> {
+    let repo_path = workspace_root();
+    let context_path = repo_path.join("todo-context.json");
+
+    // Carregar totes les propostes guardades
+    let proposals_path = repo_path.join("proposals.json");
+    let proposals_text = std::fs::read_to_string(&proposals_path).unwrap_or_else(|_| "[]".into());
+    
+    let proposals: Vec<intent_analyst::IntentProposal> = serde_json::from_str(&proposals_text)
+        .unwrap_or_else(|_| Vec::new());
+
+    // Trobar la proposta a aprovar
+    let proposal = match proposals.iter().find(|p| p.proposal_id == payload.proposal_id) {
+        Some(p) => p.clone(),
+        None => {
+            return axum::response::Json(serde_json::json!({
+                "status": "error",
+                "message": format!("Proposta #{} no trobada", payload.proposal_id),
+                "tasks_added": 0
+            }));
+        }
+    };
+
+    // Aprovar la proposta
+    match intent_analyst::approve_proposal(&proposal, &context_path) {
+        Ok(response) => axum::response::Json(serde_json::to_value(&response).unwrap()),
+        Err(e) => axum::response::Json(serde_json::json!({
+            "status": "error",
+            "message": format!("Error aprovant: {}", e),
+            "tasks_added": 0
+        })),
+    }
 }
 
 /// Handler per construir la imatge Docker.
