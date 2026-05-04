@@ -2,5 +2,5 @@
 
 ## Estat actual
 
-Status: in-progress
-Description: Compilació via HTTP
+Status: complete
+Description: Crear env.example i refactoritzar LLMClient struct
