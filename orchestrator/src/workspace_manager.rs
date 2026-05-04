@@ -72,17 +72,9 @@ impl Workspace {
 }
 
 /// Registre global de workspaces (workspaces.json).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkspaceRegistry {
     pub workspaces: Vec<Workspace>,
-}
-
-impl Default for WorkspaceRegistry {
-    fn default() -> Self {
-        Self {
-            workspaces: Vec::new(),
-        }
-    }
 }
 
 impl WorkspaceRegistry {
@@ -145,13 +137,10 @@ impl WorkspaceManager {
     pub fn new(base_dir: PathBuf) -> Self {
         let registry_path = base_dir.join("workspaces.json");
         let registry = if registry_path.exists() {
-            match fs::read_to_string(&registry_path) {
-                Ok(content) => match serde_json::from_str(&content) {
-                    Ok(reg) => reg,
-                    Err(_) => WorkspaceRegistry::default(),
-                },
-                Err(_) => WorkspaceRegistry::default(),
-            }
+            fs::read_to_string(&registry_path)
+                .ok()
+                .and_then(|content| serde_json::from_str::<WorkspaceRegistry>(&content).ok())
+                .unwrap_or_default()
         } else {
             WorkspaceRegistry::default()
         };

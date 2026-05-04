@@ -75,7 +75,7 @@ impl TelegramConfig {
 
         let authorized_ids = std::env::var("TELEGRAM_AUTHORIZED_IDS")
             .unwrap_or_default()
-            .split(|c: char| c == ',' || c == ' ' || c == '|')
+            .split([' ', ',', '|'])
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.trim().to_string())
             .collect();

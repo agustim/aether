@@ -147,9 +147,8 @@ async fn generate_llm_proposal(
         .ok_or("La resposta del LLM no conté 'tasks' vàlid")?;
 
     let mut tasks = Vec::new();
-    let mut proposal_id = 1u32;
 
-    for task_obj in tasks_array {
+    for (proposal_id, task_obj) in (1u32..).zip(tasks_array.iter()) {
         let description = task_obj
             .get("description")
             .and_then(|v| v.as_str())
@@ -161,7 +160,6 @@ async fn generate_llm_proposal(
             description,
             status: TaskStatus::Proposal,
         });
-        proposal_id += 1;
     }
 
     Ok(IntentProposal {

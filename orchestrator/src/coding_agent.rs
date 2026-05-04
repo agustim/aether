@@ -8,7 +8,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::time::Duration;
 
 use crate::llm_client::{LLMClient, LLMResult};
 use crate::todo_context::{load_context, save_context, Task, TaskStatus};
@@ -161,7 +160,6 @@ pub fn extract_rust_code(response: &str) -> String {
 /// Aquesta funció escriu el codi a `sandbox/src/main.rs` i executa
 /// `cargo check` dins del contenidor Docker.
 fn compile_and_check(code: &str) -> Result<String, String> {
-    use crate::docker_sandbox::DockerSandboxConfig;
     use crate::docker_sandbox::check_no_network_code;
     use std::fs;
     use std::path::PathBuf;
@@ -170,9 +168,7 @@ fn compile_and_check(code: &str) -> Result<String, String> {
     let sandbox_dir = workspace_root.join("sandbox");
 
     // Comprovació prèvia: verificar que el codi no intenti accedir a xarxa
-    if let Err(e) = check_no_network_code(code) {
-        return Err(e);
-    }
+    check_no_network_code(code)?;
 
     // Escriure el codi al sandbox
     let main_rs = sandbox_dir.join("src").join("main.rs");
@@ -214,7 +210,9 @@ pub async fn execute_correction_loop<'a>(
     _workspace_root: &Path,
 ) -> CorrectionResult {
     let mut iterations = Vec::new();
+    #[allow(unused_assignments)]
     let mut last_code = String::new();
+    #[allow(unused_assignments)]
     let mut last_error: Option<String> = None;
 
     // Intent 0: generació inicial
