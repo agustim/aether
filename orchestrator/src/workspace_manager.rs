@@ -243,7 +243,8 @@ impl WorkspaceManager {
         let mut reg = self.registry.clone();
         match reg.remove(id) {
             Some(ws) => {
-                self.save_registry(&reg)?;
+                self.registry = reg;  // Actualitzar el registre en memòria
+                self.save_registry(&self.registry)?;
                 Ok(ws)
             }
             None => Err(format!("No s'ha pogut eliminar el workspace '{id}'")),
