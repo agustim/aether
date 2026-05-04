@@ -1,1 +1,1 @@
-fn main() { println!("Commit OK"); }
+fn main() { println!("RO-6 Test OK"); }

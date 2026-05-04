@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -272,7 +273,7 @@ fn main() {
 
     let mut input = String::new();
     std::io::stdin()
-        .read_line(&mut input)
+        .read_to_string(&mut input)
         .expect("No s'ha pogut llegir stdin");
 
     let result: BuildResult = rt.block_on(async {

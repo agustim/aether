@@ -1,0 +1,1 @@
+{"code":"fn main() { println!(\"RO-6 Test OK\"); }","rule_id":"RO-6","rule_name":"Historial Atòmic","rule_description":"Commit automàtic amb missatge estandarditzat","todo_status":"complete","todo_description":"Implementació de la Regla d'Or 6","pending_tasks":["Afegir tests d'integració","Crear interfície web"]}

@@ -5,7 +5,9 @@
       "Bash(cargo check)",
       "Bash(cargo test)",
       "Bash(cargo clippy)",
-      "Bash(git init)"
+      "Bash(git init)",
+      "Bash(cargo run *)",
+      "Bash(rm *)"
     ]
   },
   "$version": 3
