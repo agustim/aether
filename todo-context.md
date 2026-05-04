@@ -2,9 +2,9 @@
 
 ## Estat actual
 
-Status: init
+Status: complete
 Description: Regla d'Or 6 implementada
 
 ## Tasques pendents
 
-- [ ] Inicialitzar projecte
+- [ ] 1. Afegir tests

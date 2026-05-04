@@ -378,7 +378,7 @@ mod tests {
 
         let todo_path = tmp.join("todo-context.md");
         let content = std::fs::read_to_string(&todo_path).unwrap();
-        assert!(content.contains("[in-progress]"));
+        assert!(content.contains("Status: in-progress"));
         assert!(content.contains("Actualitzant context"));
 
         let _ = std::fs::remove_file(todo_path);
