@@ -3,4 +3,4 @@
 ## Estat actual
 
 Status: in-progress
-Description: Compilació via HTTP
+Description: Codi invàlid
