@@ -6,13 +6,14 @@ Fins ara, l'Orquestrador responia a /intent amb propostes estàtiques. Ara, util
 
 Requisits Tècnics
 1. Variables d'Entorn
-S'ha d'implementar suport per a un fitxer .env (o variables d'entorn globals) amb els següents camps:
+S'ha d'implementar suport per a un fitxer .env (o variables d'entorn globals) amb els següents camps  (Genera un fitxer env.example amb aquests camps i instruccions clares de com omplir-los):
 
  * AETHER_LLM_URL: La URL base de l'API (ex: https://elmeullm/v1).
 
  * AETHER_LLM_KEY: La clau d'autenticació (Bearer Token).
 
  * AETHER_LLM_MODEL: El nom del model a utilitzar (ex: gpt-4, qwen-2.5-coder).
+
 
 2. Client de Rust (orchestrator/src/llm_client.rs)
 Utilitzar reqwest per a les crides HTTP asíncrones.

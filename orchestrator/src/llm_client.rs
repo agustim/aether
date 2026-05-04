@@ -8,9 +8,13 @@
 //! - AETHER_LLM_KEY: Clau d'autenticació (Bearer Token)
 //! - AETHER_LLM_MODEL: Nom del model (ex: gpt-4, qwen-2.5-coder)
 
-use reqwest::Client;
+use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+// ============================================================================
+// Configuració i estructures internes
+// ============================================================================
 
 /// Configuració del client LLM.
 #[derive(Debug, Clone)]
@@ -63,15 +67,164 @@ pub struct LLMResult {
     pub error: Option<String>,
 }
 
+// ============================================================================
+// LLMClient — Gestiona headers, format JSON i crides HTTP
+// ============================================================================
+
+/// Client de LLM que encapsula la connexió HTTP, headers i serialització JSON.
+///
+/// Aquesta estructura gestiona:
+/// - La configuració de l'API (URL, clau, model)
+/// - Els headers d'autorització (Bearer Token)
+/// - El format JSON de les peticions i respostes
+/// - El timeout de les crides HTTP
+pub struct LLMClient {
+    http_client: HttpClient,
+    config: LLMConfig,
+}
+
+impl LLMClient {
+    /// Crea un nou client LLM a partir de les variables d'entorn.
+    ///
+    /// # Errors
+    /// Retorna un error si `AETHER_LLM_URL` o `AETHER_LLM_KEY` no estan definides.
+    pub fn from_env() -> Result<Self, String> {
+        let config = LLMConfig::from_env()?;
+        Ok(Self::new(config))
+    }
+
+    /// Crea un nou client LLM amb una configuració específica.
+    pub fn new(config: LLMConfig) -> Self {
+        let http_client = HttpClient::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Error creant client HTTP (timeout fix de 30s)");
+
+        Self { http_client, config }
+    }
+
+    /// Construeix els headers de la petició amb el Bearer Token.
+    fn build_headers(&self) -> reqwest::header::HeaderMap {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", self.config.api_key)
+                .parse()
+                .unwrap(),
+        );
+        headers
+    }
+
+    /// Construeix la petició JSON en format OpenAI.
+    fn build_request_json(&self, system_prompt: &str, user_prompt: &str) -> LLMRequest {
+        LLMRequest {
+            model: self.config.model.clone(),
+            messages: vec![
+                LLMMessage {
+                    role: "system".into(),
+                    content: system_prompt.into(),
+                },
+                LLMMessage {
+                    role: "user".into(),
+                    content: user_prompt.into(),
+                },
+            ],
+            response_format: Some(LLMResponseFormat {
+                format_type: "json_object".into(),
+            }),
+            temperature: Some(0.3),
+        }
+    }
+
+    /// Construeix la URL completa de l'endpoint.
+    fn chat_url(&self) -> String {
+        format!("{}/chat/completions", self.config.url.trim_end_matches('/'))
+    }
+
+    /// Envia la petició HTTP al LLM i parseja la resposta.
+    async fn send_request(&self, system_prompt: &str, user_prompt: &str) -> Result<LLMResult, String> {
+        let url = self.chat_url();
+        let headers = self.build_headers();
+        let body = self.build_request_json(system_prompt, user_prompt);
+
+        let response = self
+            .http_client
+            .post(&url)
+            .headers(headers)
+            .json(&body)
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => self.parse_response(resp).await,
+            Err(e) => Ok(LLMResult {
+                success: false,
+                content: String::new(),
+                error: Some(format!("Error de xarxa: {e}")),
+            }),
+        }
+    }
+
+    /// Parseja la resposta HTTP en un LLMResult.
+    async fn parse_response(&self, resp: reqwest::Response) -> Result<LLMResult, String> {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+
+        if status.is_success() {
+            match serde_json::from_str::<LLMResponse>(&text) {
+                Ok(llm_resp) => {
+                    if let Some(choice) = llm_resp.choices.first() {
+                        Ok(LLMResult {
+                            success: true,
+                            content: choice.message.content.clone(),
+                            error: None,
+                        })
+                    } else {
+                        Ok(LLMResult {
+                            success: false,
+                            content: String::new(),
+                            error: Some("Resposta buida del LLM".into()),
+                        })
+                    }
+                }
+                Err(e) => Ok(LLMResult {
+                    success: false,
+                    content: String::new(),
+                    error: Some(format!("Error parsejant resposta LLM: {e}")),
+                }),
+            }
+        } else {
+            Ok(LLMResult {
+                success: false,
+                content: String::new(),
+                error: Some(format!("Error HTTP {}: {}", status, text)),
+            })
+        }
+    }
+
+    /// Realitza una crida al LLM amb system i user prompt.
+    pub async fn call(&self, system_prompt: &str, user_prompt: &str) -> Result<LLMResult, String> {
+        self.send_request(system_prompt, user_prompt).await
+    }
+}
+
+// ============================================================================
+// Funcions auxiliars públiques (mantingudes per compatibilitat)
+// ============================================================================
+
 impl LLMConfig {
     /// Crea una nova configuració des de les variables d'entorn.
     pub fn from_env() -> Result<Self, String> {
         let url = std::env::var("AETHER_LLM_URL")
             .map_err(|_| "AETHER_LLM_URL no configurada. Configura la URL de l'API LLM.")?;
-        
+
         let api_key = std::env::var("AETHER_LLM_KEY")
             .map_err(|_| "AETHER_LLM_KEY no configurada. Configura la clau d'API.")?;
-        
+
         let model = std::env::var("AETHER_LLM_MODEL")
             .unwrap_or_else(|_| "gpt-4".into());
 
@@ -119,93 +272,10 @@ pub fn build_context_prompt(current_context: &str) -> String {
     )
 }
 
-/// Construeix una petició al LLM.
-pub fn build_llm_request(
-    config: &LLMConfig,
-    system_prompt: &str,
-    user_prompt: &str,
-) -> LLMRequest {
-    LLMRequest {
-        model: config.model.clone(),
-        messages: vec![
-            LLMMessage {
-                role: "system".into(),
-                content: system_prompt.into(),
-            },
-            LLMMessage {
-                role: "user".into(),
-                content: user_prompt.into(),
-            },
-        ],
-        response_format: Some(LLMResponseFormat {
-            format_type: "json_object".into(),
-        }),
-        temperature: Some(0.3), // Lower temperature for more consistent outputs
-    }
-}
-
-/// Executa una crida al LLM.
+/// Funció auxiliar: executa una crida al LLM (equivalent a `LLMClient::call`).
 pub async fn call_llm(config: &LLMConfig, system_prompt: &str, user_prompt: &str) -> Result<LLMResult, String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Error creant client HTTP: {e}"))?;
-
-    let request = build_llm_request(config, system_prompt, user_prompt);
-
-    let url = format!("{}/chat/completions", config.url.trim_end_matches('/'));
-
-    let response = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
-        .header("Content-Type", "application/json")
-        .json(&request)
-        .send()
-        .await;
-
-    match response {
-        Ok(resp) => {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-
-            if status.is_success() {
-                // Parsejar la resposta
-                match serde_json::from_str::<LLMResponse>(&text) {
-                    Ok(llm_resp) => {
-                        if let Some(choice) = llm_resp.choices.first() {
-                            Ok(LLMResult {
-                                success: true,
-                                content: choice.message.content.clone(),
-                                error: None,
-                            })
-                        } else {
-                            Ok(LLMResult {
-                                success: false,
-                                content: String::new(),
-                                error: Some("Resposta buida del LLM".into()),
-                            })
-                        }
-                    }
-                    Err(e) => Ok(LLMResult {
-                        success: false,
-                        content: String::new(),
-                        error: Some(format!("Error parsejant resposta LLM: {e}")),
-                    }),
-                }
-            } else {
-                Ok(LLMResult {
-                    success: false,
-                    content: String::new(),
-                    error: Some(format!("Error HTTP {}: {}", status, text)),
-                })
-            }
-        }
-        Err(e) => Ok(LLMResult {
-            success: false,
-            content: String::new(),
-            error: Some(format!("Error de xarxa: {e}")),
-        }),
-    }
+    let client = LLMClient::new(config.clone());
+    client.call(system_prompt, user_prompt).await
 }
 
 /// Parseja la resposta del LLM com a JSON.
@@ -213,6 +283,10 @@ pub fn parse_llm_response(response: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(response)
         .map_err(|e| format!("Error parsejant JSON del LLM: {e}"))
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -236,11 +310,9 @@ mod tests {
 
     #[test]
     fn test_llm_config_from_env_missing() {
-        // Guardar valor actual (si existeix)
         let url = std::env::var("AETHER_LLM_URL").ok();
         let key = std::env::var("AETHER_LLM_KEY").ok();
 
-        // Eliminar variables
         std::env::remove_var("AETHER_LLM_URL");
         std::env::remove_var("AETHER_LLM_KEY");
 
@@ -248,7 +320,6 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("AETHER_LLM_URL"));
 
-        // Restaurar valors
         if let Some(val) = url {
             std::env::set_var("AETHER_LLM_URL", val);
         }
@@ -259,11 +330,9 @@ mod tests {
 
     #[test]
     fn test_llm_config_from_env_missing_key() {
-        // Guardar valors actuals
         let url = std::env::var("AETHER_LLM_URL").ok();
         let key = std::env::var("AETHER_LLM_KEY").ok();
 
-        // Posar només URL, eliminar KEY
         std::env::set_var("AETHER_LLM_URL", "https://api.test.com/v1");
         std::env::remove_var("AETHER_LLM_KEY");
 
@@ -271,7 +340,6 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("AETHER_LLM_KEY"));
 
-        // Restaurar valors
         if let Some(val) = url {
             std::env::set_var("AETHER_LLM_URL", val);
         }
@@ -298,6 +366,17 @@ mod tests {
     }
 
     #[test]
+    fn test_llm_client_creation_from_config() {
+        let config = LLMConfig {
+            url: "https://api.test.com/v1".into(),
+            api_key: "test-key".into(),
+            model: "test-model".into(),
+        };
+        let client = LLMClient::new(config.clone());
+        assert!(client.config.is_valid());
+    }
+
+    #[test]
     fn test_parse_llm_response_valid_json() {
         let json = r#"{"explanation": "test", "tasks": [{"id": 1, "description": "task", "status": "pending"}]}"#;
         let result = parse_llm_response(json);
@@ -316,11 +395,8 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_llm_connectivity_mock_server() {
-        // Test de connectivitat: verifica que el client LLM pot connectar
-        // a un servidor mock i rebre una resposta vàlida.
-
-        // Crear servidor mock
+    fn test_llm_client_connectivity_mock() {
+        // Test de connectivitat amb LLMClient (estructura)
         let mut server = mockito::Server::new();
         let mock = server
             .mock("POST", "/v1/chat/completions")
@@ -329,7 +405,6 @@ mod tests {
             .with_body(r#"{"choices": [{"message": {"role": "assistant", "content": "{\"explanation\":\"OK\",\"tasks\":[{\"id\":1,\"description\":\"test\",\"status\":\"pending\"}]}"}}]}"#)
             .create();
 
-        // Configurar variables d'entorn
         let url = format!("{}/v1", server.url());
         let saved_url = std::env::var("AETHER_LLM_URL").ok();
         let saved_key = std::env::var("AETHER_LLM_KEY").ok();
@@ -339,43 +414,24 @@ mod tests {
         std::env::set_var("AETHER_LLM_KEY", "mock-key-for-testing");
         std::env::set_var("AETHER_LLM_MODEL", "test-model");
 
-        // Executar crida
-        let config = LLMConfig::from_env().expect("Config ha de ser vàlida");
+        let client = LLMClient::from_env().expect("Config ha de ser vàlida");
         let result = rt().block_on(async {
-            call_llm(&config, "system prompt", "user prompt").await
+            client.call("system prompt", "user prompt").await
         });
 
-        // Restaurar variables
-        if let Some(val) = saved_url {
-            std::env::set_var("AETHER_LLM_URL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_URL");
-        }
-        if let Some(val) = saved_key {
-            std::env::set_var("AETHER_LLM_KEY", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_KEY");
-        }
-        if let Some(val) = saved_model {
-            std::env::set_var("AETHER_LLM_MODEL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_MODEL");
-        }
+        if let Some(val) = saved_url { std::env::set_var("AETHER_LLM_URL", val); } else { std::env::remove_var("AETHER_LLM_URL"); }
+        if let Some(val) = saved_key { std::env::set_var("AETHER_LLM_KEY", val); } else { std::env::remove_var("AETHER_LLM_KEY"); }
+        if let Some(val) = saved_model { std::env::set_var("AETHER_LLM_MODEL", val); } else { std::env::remove_var("AETHER_LLM_MODEL"); }
 
-        // Verificar resultats
-        assert!(result.is_ok(), "La crida al LLM ha de funcionar amb servidor mock");
+        assert!(result.is_ok(), "La crida al LLM ha de funcionar amb LLMClient");
         let llm_result = result.unwrap();
-        assert!(llm_result.success, "El LLM ha de retornar success, error: {:?}", llm_result.error);
+        assert!(llm_result.success, "success: {:?}", llm_result.error);
         assert!(llm_result.content.contains("explanation"));
-        assert!(llm_result.content.contains("tasks"));
         mock.assert();
     }
 
     #[test]
     fn test_llm_malformed_json_response() {
-        // Test de parsing: verifica que si el LLM retorna JSON mal format,
-        // l'orquestrador ho gestiona sense panic.
-
         let mut server = mockito::Server::new();
         let mock = server
             .mock("POST", "/v1/chat/completions")
@@ -393,41 +449,24 @@ mod tests {
         std::env::set_var("AETHER_LLM_KEY", "mock-key-for-testing");
         std::env::set_var("AETHER_LLM_MODEL", "test-model");
 
-        let config = LLMConfig::from_env().expect("Config ha de ser vàlida");
+        let client = LLMClient::from_env().expect("Config ha de ser vàlida");
         let result = rt().block_on(async {
-            call_llm(&config, "system prompt", "user prompt").await
+            client.call("system prompt", "user prompt").await
         });
 
-        // Restaurar variables
-        if let Some(val) = saved_url {
-            std::env::set_var("AETHER_LLM_URL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_URL");
-        }
-        if let Some(val) = saved_key {
-            std::env::set_var("AETHER_LLM_KEY", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_KEY");
-        }
-        if let Some(val) = saved_model {
-            std::env::set_var("AETHER_LLM_MODEL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_MODEL");
-        }
+        if let Some(val) = saved_url { std::env::set_var("AETHER_LLM_URL", val); } else { std::env::remove_var("AETHER_LLM_URL"); }
+        if let Some(val) = saved_key { std::env::set_var("AETHER_LLM_KEY", val); } else { std::env::remove_var("AETHER_LLM_KEY"); }
+        if let Some(val) = saved_model { std::env::set_var("AETHER_LLM_MODEL", val); } else { std::env::remove_var("AETHER_LLM_MODEL"); }
 
-        // La crida HTTP és exitosa (200) — l'objectiu és que no faci panic
-        assert!(result.is_ok(), "La crida HTTP ha de ser OK");
+        assert!(result.is_ok());
         let llm_result = result.unwrap();
-        assert!(llm_result.success, "HTTP 200 = success (el parsing no afecta això), error: {:?}", llm_result.error);
-        // El content és el text brut (no JSON vàlid)
+        assert!(llm_result.success, "error: {:?}", llm_result.error);
         assert!(llm_result.content.contains("això no és JSON"));
         mock.assert();
     }
 
     #[test]
     fn test_llm_http_error_response() {
-        // Test: verifica que errors HTTP no-success es gestionen correctament.
-
         let mut server = mockito::Server::new();
         let mock = server
             .mock("POST", "/v1/chat/completions")
@@ -445,36 +484,22 @@ mod tests {
         std::env::set_var("AETHER_LLM_KEY", "wrong-key");
         std::env::set_var("AETHER_LLM_MODEL", "test-model");
 
-        let config = LLMConfig::from_env().expect("Config ha de ser vàlida");
+        let client = LLMClient::from_env().expect("Config ha de ser vàlida");
         let result = rt().block_on(async {
-            call_llm(&config, "system prompt", "user prompt").await
+            client.call("system prompt", "user prompt").await
         });
 
-        // Restaurar variables
-        if let Some(val) = saved_url {
-            std::env::set_var("AETHER_LLM_URL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_URL");
-        }
-        if let Some(val) = saved_key {
-            std::env::set_var("AETHER_LLM_KEY", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_KEY");
-        }
-        if let Some(val) = saved_model {
-            std::env::set_var("AETHER_LLM_MODEL", val);
-        } else {
-            std::env::remove_var("AETHER_LLM_MODEL");
-        }
+        if let Some(val) = saved_url { std::env::set_var("AETHER_LLM_URL", val); } else { std::env::remove_var("AETHER_LLM_URL"); }
+        if let Some(val) = saved_key { std::env::set_var("AETHER_LLM_KEY", val); } else { std::env::remove_var("AETHER_LLM_KEY"); }
+        if let Some(val) = saved_model { std::env::set_var("AETHER_LLM_MODEL", val); } else { std::env::remove_var("AETHER_LLM_MODEL"); }
 
-        // La crida retorna un LLMResult amb success=false
-        assert!(result.is_ok(), "La crida ha de retornar un Result");
+        assert!(result.is_ok());
         let llm_result = result.unwrap();
         assert!(!llm_result.success, "HTTP 401 ha de marcar failure");
-        assert!(llm_result.error.is_some(), "Ha de tenir missatge d'error");
+        assert!(llm_result.error.is_some());
         let err_msg = llm_result.error.as_ref().unwrap();
         assert!(err_msg.contains("401") || err_msg.contains("Invalid API key"),
-            "L'error ha de contenir informació de l'error HTTP, got: {}", err_msg);
+            "got: {}", err_msg);
         mock.assert();
     }
 

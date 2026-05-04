@@ -2,3 +2,5 @@
 /.idea/
 *.log
 .env
+sandbox/target
+orchestrator/target
