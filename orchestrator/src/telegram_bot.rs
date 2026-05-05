@@ -13,7 +13,32 @@ use std::fs;
 use std::path::Path;
 
 // ============================================================================
-// Models de dades
+// Models de dades per a integració HTTP
+// ============================================================================
+
+/// Petició per enviar un intent.
+#[derive(Debug, Serialize)]
+pub struct IntentRequest {
+    pub intent: String,
+}
+
+/// Resposta amb proposta de l'IA.
+#[derive(Debug, Deserialize)]
+pub struct IntentResponse {
+    pub proposal_id: u32,
+    pub intent: String,
+    pub tasks: Vec<serde_json::Value>,
+    pub explanation: String,
+}
+
+/// Petició per aprovar una proposta.
+#[derive(Debug, Serialize)]
+pub struct ApproveRequest {
+    pub proposal_id: u32,
+}
+
+// ============================================================================
+// Models de dades Telegram
 // ============================================================================
 
 /// Tipus de comanda Telegram processada.
@@ -298,9 +323,11 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
     use teloxide::prelude::*;
 
     let bot = Bot::new(&config.bot_token);
+    let http_url = std::env::var("AETHER_HTTP_URL").unwrap_or_else(|_| "http://localhost:3000".into());
 
     tracing::info!("🤖 Bot de Telegram connectat");
     tracing::info!("👥 Usuaris autoritzats: {}", config.authorized_ids.join(", "));
+    tracing::info!("🌐 HTTP URL: {}", http_url);
 
     let mut offset: i32 = 0;
 
@@ -333,9 +360,43 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
                     }
                     Some(text) if text.starts_with("/new_intent") => {
                         let intent = text.trim_start_matches("/new_intent").trim();
-                        let response = format!("✅ Intenció rebuda: {}", intent);
-                        if let Err(e) = bot.send_message(msg.chat.id, response).await {
-                            tracing::error!("Error enviant missatge: {}", e);
+
+                        // 1. Enviar intent al servidor HTTP
+                        let send_msg = "⏳ Processant intenció...";
+                        let _ = bot.send_message(msg.chat.id, send_msg).await;
+
+                        match send_intent_to_server(&http_url, intent).await {
+                            Ok(proposal) => {
+                                let proposal_id = proposal.proposal_id;
+                                tracing::info!("✅ Proposta #{} generada: {}", proposal_id, intent);
+
+                                // 2. Aprovar automàticament
+                                match auto_approve_proposal(&http_url, proposal_id).await {
+                                    Ok(tasks_added) => {
+                                        let response = format!(
+                                            "✅ **Proposta #{} aprovada**\n\n📋 {} tasques afegides\n\n💬 \"{}\"",
+                                            proposal_id, tasks_added, intent
+                                        );
+                                        let _ = bot.send_message(msg.chat.id, response)
+                                            .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        let response = format!(
+                                            "⚠️ Proposta generada però error aprovant: {}\n\n💬 \"{}\"",
+                                            e, intent
+                                        );
+                                        let _ = bot.send_message(msg.chat.id, response).await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let response = format!(
+                                    "❌ Error processant intenció:\n\n{}",
+                                    e
+                                );
+                                let _ = bot.send_message(msg.chat.id, response).await;
+                            }
                         }
                     }
                     Some("/status") => {
@@ -367,6 +428,71 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
             offset = update_id + 1;
         }
     }
+}
+
+// ============================================================================
+// Integració HTTP — envia intents al servidor
+// ============================================================================
+
+/// Construeix la petició per enviar un intent.
+pub fn intent_request(intent: &str) -> IntentRequest {
+    IntentRequest { intent: intent.to_string() }
+}
+
+/// Construeix la petició per aprovar una proposta.
+pub fn approve_request(proposal_id: u32) -> ApproveRequest {
+    ApproveRequest { proposal_id }
+}
+
+/// Envia un intent al servidor HTTP i retorna la proposta.
+pub async fn send_intent_to_server(
+    http_url: &str,
+    intent_text: &str,
+) -> Result<IntentResponse, String> {
+    use reqwest::Client;
+
+    let client = Client::new();
+    let url = format!("{}/intent", http_url.trim_end_matches('/'));
+
+    // Pas 1: Enviar intent → obtenir proposta
+    let intent_resp = client
+        .post(&url)
+        .json(&intent_request(intent_text))
+        .send()
+        .await
+        .map_err(|e| format!("Error enviant intent: {}", e))?;
+
+    let proposal: IntentResponse = intent_resp
+        .json()
+        .await
+        .map_err(|e| format!("Error llegint resposta: {}", e))?;
+
+    Ok(proposal)
+}
+
+/// Aprova automàticament una proposta pel servidor.
+pub async fn auto_approve_proposal(
+    http_url: &str,
+    proposal_id: u32,
+) -> Result<u32, String> {
+    use reqwest::Client;
+
+    let client = Client::new();
+    let url = format!("{}/context/approve", http_url.trim_end_matches('/'));
+
+    let resp = client
+        .post(&url)
+        .json(&approve_request(proposal_id))
+        .send()
+        .await
+        .map_err(|e| format!("Error aprovant: {}", e))?;
+
+    let result: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Error llegint resposta: {}", e))?;
+
+    Ok(result["tasks_added"].as_u64().unwrap_or(0) as u32)
 }
 
 // ============================================================================
@@ -645,5 +771,23 @@ mod tests {
             parse_telegram_command("/new_intent Crear un servidor HTTP/2 amb TLS"),
             TelegramCommand::NewIntent("Crear un servidor HTTP/2 amb TLS".into())
         );
+    }
+
+    // ========================================================================
+    // Tests de TelegramIntegration (enviament intents al HTTP)
+    // ========================================================================
+
+    #[test]
+    fn test_integration_builds_intent_request() {
+        use super::intent_request;
+        let request = intent_request("Crear un servidor web");
+        assert_eq!(request.intent, "Crear un servidor web");
+    }
+
+    #[test]
+    fn test_integration_builds_approve_request() {
+        use super::approve_request;
+        let request = approve_request(42);
+        assert_eq!(request.proposal_id, 42);
     }
 }
