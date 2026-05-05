@@ -1,26 +1,56 @@
 {
   "project_name": "Aether Code",
-  "current_stage": "QA",
+  "current_stage": "Analyst",
   "tasks": [
     {
       "id": 1,
-      "description": "Tasca antiga",
+      "description": "Tasca 1",
       "status": "completed"
     },
     {
       "id": 2,
-      "description": "Tasca en curs",
+      "description": "Tasca 2",
       "status": "completed"
     },
     {
       "id": 3,
-      "description": "Tasca futura",
+      "description": "Tasca 3",
       "status": "completed"
     },
     {
       "id": 4,
-      "description": "Nova tasca des del mòbil",
+      "description": "Tasca 4",
+      "status": "completed"
+    },
+    {
+      "id": 5,
+      "description": "Tasca 5",
+      "status": "completed"
+    },
+    {
+      "id": 6,
+      "description": "Tasca 6",
+      "status": "completed"
+    },
+    {
+      "id": 7,
+      "description": "Tasca 7",
       "status": "in_progress"
+    },
+    {
+      "id": 8,
+      "description": "Analitzar requisits de: Vull que el sistema saludi en català",
+      "status": "pending"
+    },
+    {
+      "id": 10,
+      "description": "Implementar funcionalitat: Vull que el sistema saludi en català",
+      "status": "pending"
+    },
+    {
+      "id": 13,
+      "description": "Crear tests per validar: Vull que el sistema saludi en català",
+      "status": "pending"
     }
   ]
 }
