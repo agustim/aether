@@ -302,9 +302,11 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
     tracing::info!("🤖 Bot de Telegram connectat");
     tracing::info!("👥 Usuaris autoritzats: {}", config.authorized_ids.join(", "));
 
+    let mut offset: i32 = 0;
+
     loop {
-        // Polling manual
-        let updates = match bot.get_updates().await {
+        // Polling manual amb offset per només rebre missatges nous
+        let updates = match bot.get_updates().limit(100).offset(offset).await {
             Ok(updates) => updates,
             Err(e) => {
                 tracing::warn!("⚠️ Error obtenint missatges: {}", e);
@@ -313,7 +315,14 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
             }
         };
 
+        if updates.is_empty() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            continue;
+        }
+
         for update in updates {
+            let update_id = update.id;
+
             if let teloxide::types::UpdateKind::Message(msg) = &update.kind {
                 match msg.text() {
                     Some("/start") => {
@@ -353,10 +362,10 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
                     _ => {}
                 }
             }
-        }
 
-        // Esperar abans del següent polling
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            // Actualitzar offset: següent vegada només rebrem missatges nous
+            offset = update_id + 1;
+        }
     }
 }
 
