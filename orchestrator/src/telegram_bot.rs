@@ -25,8 +25,16 @@ pub struct IntentRequest {
 /// Resposta amb proposta de l'IA.
 #[derive(Debug, Deserialize)]
 pub struct IntentResponse {
+    pub status: String,
+    pub message: String,
+    pub proposal: Option<ProposalData>,
+}
+
+/// Dades de la proposta dins de la resposta.
+#[derive(Debug, Deserialize)]
+pub struct ProposalData {
     pub proposal_id: u32,
-    pub intent: String,
+    pub original_intent: String,
     pub tasks: Vec<serde_json::Value>,
     pub explanation: String,
 }
@@ -366,36 +374,44 @@ pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
                         let _ = bot.send_message(msg.chat.id, send_msg).await;
 
                         match send_intent_to_server(&http_url, intent).await {
-                            Ok(proposal) => {
-                                let proposal_id = proposal.proposal_id;
-                                tracing::info!("✅ Proposta #{} generada: {}", proposal_id, intent);
+                            Ok(response) => {
+                                if let Some(proposal) = response.proposal {
+                                    let proposal_id = proposal.proposal_id;
+                                    tracing::info!("✅ Proposta #{} generada: {}", proposal_id, intent);
 
-                                // 2. Aprovar automàticament
-                                match auto_approve_proposal(&http_url, proposal_id).await {
-                                    Ok(tasks_added) => {
-                                        let response = format!(
-                                            "✅ **Proposta #{} aprovada**\n\n📋 {} tasques afegides\n\n💬 \"{}\"",
-                                            proposal_id, tasks_added, intent
-                                        );
-                                        let _ = bot.send_message(msg.chat.id, response)
-                                            .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                                            .await;
+                                    // 2. Aprovar automàticament
+                                    match auto_approve_proposal(&http_url, proposal_id).await {
+                                        Ok(tasks_added) => {
+                                            let response_text = format!(
+                                                "✅ **Proposta #{} aprovada**\n\n📋 {} tasques afegides\n\n💬 \"{}\"",
+                                                proposal_id, tasks_added, proposal.original_intent
+                                            );
+                                            let _ = bot.send_message(msg.chat.id, response_text)
+                                                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+                                                .await;
+                                        }
+                                        Err(e) => {
+                                            let response_text = format!(
+                                                "⚠️ Proposta generada però error aprovant: {}\n\n💬 \"{}\"",
+                                                e, intent
+                                            );
+                                            let _ = bot.send_message(msg.chat.id, response_text).await;
+                                        }
                                     }
-                                    Err(e) => {
-                                        let response = format!(
-                                            "⚠️ Proposta generada però error aprovant: {}\n\n💬 \"{}\"",
-                                            e, intent
-                                        );
-                                        let _ = bot.send_message(msg.chat.id, response).await;
-                                    }
+                                } else {
+                                    let response_text = format!(
+                                        "❌ No s'ha generat cap proposta:\n\n{}",
+                                        response.message
+                                    );
+                                    let _ = bot.send_message(msg.chat.id, response_text).await;
                                 }
                             }
                             Err(e) => {
-                                let response = format!(
+                                let response_text = format!(
                                     "❌ Error processant intenció:\n\n{}",
                                     e
                                 );
-                                let _ = bot.send_message(msg.chat.id, response).await;
+                                let _ = bot.send_message(msg.chat.id, response_text).await;
                             }
                         }
                     }
@@ -789,5 +805,24 @@ mod tests {
         use super::approve_request;
         let request = approve_request(42);
         assert_eq!(request.proposal_id, 42);
+    }
+
+    #[test]
+    fn test_integration_response_deserialize() {
+        use super::IntentResponse;
+        let json = r#"{
+            "status": "success",
+            "message": "Proposta generada",
+            "proposal": {
+                "proposal_id": 1,
+                "original_intent": "Crear un servidor web",
+                "tasks": [],
+                "explanation": "Explicació"
+            }
+        }"#;
+        let response: IntentResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.status, "success");
+        assert!(response.proposal.is_some());
+        assert_eq!(response.proposal.unwrap().proposal_id, 1);
     }
 }

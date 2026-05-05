@@ -1,24 +1,24 @@
 [
   {
     "proposal_id": 1,
-    "original_intent": "Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+    "original_intent": "Crea un script que calculi l'arrel quadrada usant el mètode de Newton",
     "tasks": [
       {
         "id": 1,
-        "description": "Analitzar requisits de: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+        "description": "Analitzar requisits de: Crea un script que calculi l'arrel quadrada usant el mètode de Newton",
         "status": "proposal"
       },
       {
         "id": 2,
-        "description": "Implementar funcionalitat: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+        "description": "Implementar funcionalitat: Crea un script que calculi l'arrel quadrada usant el mètode de Newton",
         "status": "proposal"
       },
       {
         "id": 3,
-        "description": "Crear tests per validar: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva.",
+        "description": "Crear tests per validar: Crea un script que calculi l'arrel quadrada usant el mètode de Newton",
         "status": "proposal"
       }
     ],
-    "explanation": "S'han generat 3 tasques tècniques basades en la intenció: Crea un mòdul de matemàtiques que tingui una funció per calcular el factorial de forma recursiva."
+    "explanation": "S'han generat 3 tasques tècniques basades en la intenció: Crea un script que calculi l'arrel quadrada usant el mètode de Newton"
   }
 ]
