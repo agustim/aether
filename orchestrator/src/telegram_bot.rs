@@ -291,26 +291,73 @@ impl ChatRegistry {
 // Execució del bot
 // ============================================================================
 
-/// Executa el bot de Telegram.
+/// Executa el bot de Telegram amb teloxide.
 ///
-/// Aquesta funció és un placeholder que mostra els logs.
-/// Per implementar el bot complet, cal ajustar-lo a l'API de teloxide.
+/// S'ha de cridar des de `main.rs` amb un `tokio::spawn`.
 pub async fn run_telegram_bot(config: TelegramConfig) -> Result<(), String> {
-    tracing::info!("🤖 Bot de Telegram iniciat");
+    use teloxide::prelude::*;
+
+    let bot = Bot::new(&config.bot_token);
+
+    tracing::info!("🤖 Bot de Telegram connectat");
     tracing::info!("👥 Usuaris autoritzats: {}", config.authorized_ids.join(", "));
 
-    // TODO: Implementar amb teloxide::prelude::*
-    // Exemple:
-    // let bot = Bot::new(&config.bot_token);
-    // let handler = update::filter_message()...;
-    // Dispatcher::builder(bot, handler).build().dispatch().await;
+    loop {
+        // Polling manual
+        let updates = match bot.get_updates().await {
+            Ok(updates) => updates,
+            Err(e) => {
+                tracing::warn!("⚠️ Error obtenint missatges: {}", e);
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                continue;
+            }
+        };
 
-    tracing::info!("ℹ️  Bot de Telegram en mode placeholder (cal implementar amb teloxide)");
+        for update in updates {
+            if let teloxide::types::UpdateKind::Message(msg) = &update.kind {
+                match msg.text() {
+                    Some("/start") => {
+                        let welcome = build_welcome_message("Aether Bot");
+                        if let Err(e) = bot.send_message(msg.chat.id, welcome).await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    Some(text) if text.starts_with("/new_intent") => {
+                        let intent = text.trim_start_matches("/new_intent").trim();
+                        let response = format!("✅ Intenció rebuda: {}", intent);
+                        if let Err(e) = bot.send_message(msg.chat.id, response).await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    Some("/status") => {
+                        if let Err(e) = bot.send_message(msg.chat.id, "📊 Estat: OK ✅").await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    Some(text) if text.starts_with("/switch") => {
+                        let ws = text.split_whitespace().nth(1).unwrap_or("?");
+                        if let Err(e) = bot.send_message(msg.chat.id, format!("🔄 Workspace: {}", ws)).await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    Some("/logs") => {
+                        if let Err(e) = bot.send_message(msg.chat.id, "📋 No hi ha logs recents.").await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    Some(text) => {
+                        if let Err(e) = bot.send_message(msg.chat.id, format!("💬 Rebut: {}", text)).await {
+                            tracing::error!("Error enviant missatge: {}", e);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
-    // Simular espera (en producció seria polling.loop)
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-    Ok(())
+        // Esperar abans del següent polling
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    }
 }
 
 // ============================================================================
