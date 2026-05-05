@@ -471,6 +471,8 @@ pub async fn send_intent_to_server(
     let url = format!("{}/intent", http_url.trim_end_matches('/'));
 
     // Pas 1: Enviar intent → obtenir proposta
+    tracing::info!("📤 Enviant intent a HTTP: {} -> {}", intent_text, url);
+
     let intent_resp = client
         .post(&url)
         .json(&intent_request(intent_text))
@@ -478,10 +480,16 @@ pub async fn send_intent_to_server(
         .await
         .map_err(|e| format!("Error enviant intent: {}", e))?;
 
-    let proposal: IntentResponse = intent_resp
-        .json()
+    // Llegir el cos raw per fer logging
+    let body = intent_resp
+        .text()
         .await
-        .map_err(|e| format!("Error llegint resposta: {}", e))?;
+        .map_err(|e| format!("Error llegint body: {}", e))?;
+
+    tracing::info!("📥 Resposta HTTP (raw): {}", body);
+
+    let proposal: IntentResponse = serde_json::from_str(&body)
+        .map_err(|e| format!("Error deserialitzant resposta: {} — body: {}", e, body))?;
 
     Ok(proposal)
 }
